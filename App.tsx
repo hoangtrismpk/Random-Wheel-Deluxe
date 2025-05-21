@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import WheelCanvas from './components/WheelCanvas';
 import NameInput from './components/NameInput';
@@ -13,7 +14,7 @@ const easeOutQuart = (t: number, b: number, c: number, d: number): number => {
 };
 
 const App: React.FC = () => {
-  const [names, setNames] = useState<string[]>(['Quay thử!', 'Thử lại', 'Chiến thắng!', 'Chúc may mắn', 'Trúng độc đắc!', 'Gần trúng...', 'Sát nút', 'Lần tới']);
+  const [names, setNames] = useState<string[]>(['Nguyễn Văn An', 'Trần Thị Bích', 'Lê Minh Cường', 'Phạm Thu Hà', 'Hoàng Đức Hải', 'Vũ Ngọc Lan', 'Đặng Tiến Dũng', 'Bùi Thanh Mai']);
   const [currentRotation, setCurrentRotation] = useState(0); // radians
   const [isSpinning, setIsSpinning] = useState(false);
   const [selectedName, setSelectedName] = useState<string | null>(null);
@@ -22,11 +23,11 @@ const App: React.FC = () => {
   const [showWinnerModal, setShowWinnerModal] = useState(false);
   const [winnerHistory, setWinnerHistory] = useState<string[]>([]);
   const [calculatedCanvasSize, setCalculatedCanvasSize] = useState(500);
-  const [centerImageSrc, setCenterImageSrc] = useState<string | null>(null); 
-  const [isImageModalOpen, setIsImageModalOpen] = useState(false); 
+  const [centerImageSrc, setCenterImageSrc] = useState<string | null>(null);
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
 
-  const [priorityNamesInput, setPriorityNamesInput] = useState<string>(''); 
-  const [parsedPriorityNames, setParsedPriorityNames] = useState<string[]>([]); 
+  const [priorityNamesInput, setPriorityNamesInput] = useState<string>('');
+  const [parsedPriorityNames, setParsedPriorityNames] = useState<string[]>([]);
   const [showPriorityInputSection, setShowPriorityInputSection] = useState(false);
 
 
@@ -38,7 +39,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const newParsedNames = priorityNamesInput
-      .split(/[\n,]+/) 
+      .split(/[\n,]+/)
       .map(name => name.trim())
       .filter(name => name.length > 0);
     setParsedPriorityNames(newParsedNames);
@@ -48,8 +49,8 @@ const App: React.FC = () => {
     setNames(newNames);
     setSelectedName(null);
     
-    if (!isSpinning) { 
-        setCurrentRotation(prev => prev % (2 * Math.PI)); 
+    if (!isSpinning) {
+        setCurrentRotation(prev => prev % (2 * Math.PI));
     }
   }, [isSpinning]);
 
@@ -57,14 +58,14 @@ const App: React.FC = () => {
     if (names.length === 0 || isSpinning) return;
 
     setIsSpinning(true);
-    setSelectedName(null); 
+    setSelectedName(null);
     setShowConfetti(false);
-    setShowWinnerModal(false); 
+    setShowWinnerModal(false);
 
     let potentialWinnerByName: string | null = null;
 
-    if (parsedPriorityNames.length > 0) { 
-      const validPriorityCandidatesOnWheel = names.filter(nameOnWheel => 
+    if (parsedPriorityNames.length > 0) {
+      const validPriorityCandidatesOnWheel = names.filter(nameOnWheel =>
         parsedPriorityNames.includes(nameOnWheel)
       );
 
@@ -76,23 +77,23 @@ const App: React.FC = () => {
         if (determinedWinnerIndex !== -1) {
           winnerIndexRef.current = determinedWinnerIndex;
         } else {
-          potentialWinnerByName = null; 
+          potentialWinnerByName = null;
         }
       }
     }
 
-    if (potentialWinnerByName === null) { 
+    if (potentialWinnerByName === null) {
       winnerIndexRef.current = Math.floor(Math.random() * names.length);
     }
     
     const numSegments = names.length;
     const anglePerSegment = (2 * Math.PI) / numSegments;
 
-    let desiredFinalAngleOfSegment = -Math.PI / 2; 
+    let desiredFinalAngleOfSegment = -Math.PI / 2;
     let segmentMiddleAngle = (winnerIndexRef.current * anglePerSegment) + (anglePerSegment / 2);
     let targetAngle = desiredFinalAngleOfSegment - segmentMiddleAngle;
 
-    const MIN_ADDITIONAL_ROTATIONS = 6; 
+    const MIN_ADDITIONAL_ROTATIONS = 6;
     let totalTargetRotation = currentRotation + MIN_ADDITIONAL_ROTATIONS * 2 * Math.PI;
     
     const currentRotRemainder = totalTargetRotation % (2 * Math.PI);
@@ -101,8 +102,8 @@ const App: React.FC = () => {
 
     totalTargetRotation += (normalizedTargetAngle - normalizedCurrentRotRemainder);
 
-     if (totalTargetRotation <= currentRotation + 0.1) { 
-        totalTargetRotation += 2 * Math.PI; 
+     if (totalTargetRotation <= currentRotation + 0.1) {
+        totalTargetRotation += 2 * Math.PI;
     }
     
     targetRotationRef.current = totalTargetRotation;
@@ -114,18 +115,18 @@ const App: React.FC = () => {
       if (elapsed >= spinDuration) {
         const finalRotation = targetRotationRef.current;
         setCurrentRotation(finalRotation);
-        setIsSpinning(false); 
+        setIsSpinning(false);
         animationFrameIdRef.current = null;
 
         const winner = names[winnerIndexRef.current];
-        const trimmedWinner = winner ? winner.trim() : ""; 
+        const trimmedWinner = winner ? winner.trim() : "";
 
-        if (trimmedWinner.length > 0) { 
-            setSelectedName(trimmedWinner); 
+        if (trimmedWinner.length > 0) {
+            setSelectedName(trimmedWinner);
             setWinnerHistory(prevHistory => [...prevHistory, trimmedWinner]);
-            setShowWinnerModal(true); 
+            setShowWinnerModal(true);
             setShowConfetti(true);
-            setTimeout(() => setShowConfetti(false), 6000); 
+            setTimeout(() => setShowConfetti(false), 6000);
         } else {
             console.warn("Spin resulted in an invalid or empty winner name. Modal not shown.");
             setSelectedName(null);
@@ -150,12 +151,12 @@ const App: React.FC = () => {
     const updateCanvasSize = () => {
         const maxWidthPercentage = window.innerWidth < 1024 ? 0.9 : 0.55;
         const availableWidth = window.innerWidth * maxWidthPercentage;
-        const availableHeight = window.innerHeight * 0.7; 
+        const availableHeight = window.innerHeight * 0.7;
 
         const newSize = Math.max(250, Math.min(800, availableWidth - 40, availableHeight - 40));
         setCalculatedCanvasSize(newSize);
     };
-    updateCanvasSize(); 
+    updateCanvasSize();
     window.addEventListener('resize', updateCanvasSize);
     return () => {
         window.removeEventListener('resize', updateCanvasSize);
@@ -165,7 +166,7 @@ const App: React.FC = () => {
     };
   }, []);
 
-  const handleCloseWinnerModal = useCallback(() => { 
+  const handleCloseWinnerModal = useCallback(() => {
     setShowWinnerModal(false);
   }, []);
 
@@ -176,7 +177,7 @@ const App: React.FC = () => {
         if (isImageModalOpen) setIsImageModalOpen(false);
       }
       if (event.ctrlKey && event.altKey && (event.key === 'k' || event.key === 'K')) {
-        event.preventDefault(); 
+        event.preventDefault();
         setShowPriorityInputSection(prev => !prev);
       }
     };
@@ -185,14 +186,14 @@ const App: React.FC = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [showWinnerModal, isImageModalOpen, handleCloseWinnerModal]); 
+  }, [showWinnerModal, isImageModalOpen, handleCloseWinnerModal]);
 
 
   const handleRemoveWinner = () => {
     if (selectedName) {
       const nameToRemove = selectedName;
       
-      handleNamesUpdate(names.filter(name => name !== nameToRemove)); 
+      handleNamesUpdate(names.filter(name => name !== nameToRemove));
 
       const currentPriorityList = priorityNamesInput
         .split(/[\n,]+/)
@@ -200,9 +201,9 @@ const App: React.FC = () => {
         .filter(name => name.length > 0);
       
       const newPriorityList = currentPriorityList.filter(name => name !== nameToRemove);
-      setPriorityNamesInput(newPriorityList.join('\n')); 
+      setPriorityNamesInput(newPriorityList.join('\n'));
     }
-    setShowWinnerModal(false); 
+    setShowWinnerModal(false);
   };
   
   const handleClearWinnerHistory = () => {
@@ -211,7 +212,7 @@ const App: React.FC = () => {
 
   const handleImageSelected = (src: string) => {
     setCenterImageSrc(src);
-    setIsImageModalOpen(false); 
+    setIsImageModalOpen(false);
   };
 
   const handleRemoveLogo = () => {
@@ -221,17 +222,17 @@ const App: React.FC = () => {
   const ConfettiPiece: React.FC<{id: number}> = ({id}) => {
     const style = {
       left: `${Math.random() * 100}%`,
-      animationDuration: `${Math.random() * 3 + 4}s`, 
-      animationDelay: `${Math.random() * 0.8}s`, 
-      backgroundColor: `hsl(${Math.random() * 360}, 80%, 65%)`, 
-      transform: `rotate(${Math.random() * 720 - 360}deg) scale(${Math.random() * 0.6 + 0.7})`, 
-      width: `${Math.random() * 8 + 8}px`, 
-      height: `${Math.random() * 15 + 10}px`, 
+      animationDuration: `${Math.random() * 3 + 4}s`,
+      animationDelay: `${Math.random() * 0.8}s`,
+      backgroundColor: `hsl(${Math.random() * 360}, 80%, 65%)`,
+      transform: `rotate(${Math.random() * 720 - 360}deg) scale(${Math.random() * 0.6 + 0.7})`,
+      width: `${Math.random() * 8 + 8}px`,
+      height: `${Math.random() * 15 + 10}px`,
     };
     return <div key={id} className="absolute opacity-0 animate-fall rounded-sm" style={style}></div>;
   };
 
-  const spinDurationsOptions = [5, 10, 15]; 
+  const spinDurationsOptions = [5, 10, 15];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-slate-100 flex flex-col items-center justify-center p-4 space-y-6">
@@ -254,7 +255,10 @@ const App: React.FC = () => {
       `}</style>
       
       <header className="text-center">
-        <h1 className="text-5xl font-extrabold tracking-tight sm:text-6xl md:text-7xl">
+        <h1 
+          className="text-5xl font-extrabold tracking-tight sm:text-6xl md:text-7xl"
+          style={{ lineHeight: 'normal' }} 
+        >
           <span className="block text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-red-500 to-yellow-500">
             Vòng Quay May Mắn
           </span>
@@ -264,19 +268,19 @@ const App: React.FC = () => {
 
       <main className="flex flex-col lg:flex-row items-start justify-around w-full max-w-screen-2xl gap-6 lg:gap-10">
         <div className="relative flex-shrink-0 w-full lg:w-auto aspect-square mx-auto lg:mx-0" style={{maxWidth: `${calculatedCanvasSize}px`, maxHeight: `${calculatedCanvasSize}px` }}>
-          <WheelCanvas 
-            names={names} 
-            rotationAngle={currentRotation} 
+          <WheelCanvas
+            names={names}
+            rotationAngle={currentRotation}
             canvasSize={calculatedCanvasSize}
             centerImageSrc={centerImageSrc}
           />
         </div>
 
         <div className="flex flex-col items-center space-y-5 w-full lg:w-auto lg:max-w-md xl:max-w-lg">
-          <NameInput 
-            currentNames={names} 
-            onNamesChange={handleNamesUpdate} 
-            isSpinning={isSpinning || showWinnerModal} 
+          <NameInput
+            currentNames={names}
+            onNamesChange={handleNamesUpdate}
+            isSpinning={isSpinning || showWinnerModal}
           />
 
           {showPriorityInputSection && (
@@ -395,7 +399,7 @@ const App: React.FC = () => {
         </div>
       </main>
       <footer className="text-slate-500 text-sm mt-auto pt-6">
-        Tạo bằng React, TypeScript, và Tailwind CSS. (Ctrl+Alt+K cho Người Chiến Thắng Ưu Tiên)
+        Được xây dựng bởi iRace.vn ❤️
       </footer>
 
       <WinnerModal
@@ -413,7 +417,7 @@ const App: React.FC = () => {
 
       {showConfetti && (
         <div className="fixed inset-0 w-screen h-screen pointer-events-none z-[100] overflow-hidden">
-          {Array.from({ length: 150 }).map((_, i) => <ConfettiPiece key={i} id={i} />)} 
+          {Array.from({ length: 150 }).map((_, i) => <ConfettiPiece key={i} id={i} />)}
         </div>
       )}
     </div>
