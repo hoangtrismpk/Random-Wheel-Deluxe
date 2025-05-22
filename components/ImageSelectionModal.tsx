@@ -5,9 +5,15 @@ interface ImageSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onImageSelected: (src: string) => void;
+  purposeTitle?: string; // New prop for dynamic title
 }
 
-const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({ isOpen, onClose, onImageSelected }) => {
+const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({ 
+  isOpen, 
+  onClose, 
+  onImageSelected,
+  purposeTitle = "Chọn Hình Ảnh" // Default title
+}) => {
   const [urlInput, setUrlInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'upload' | 'url'>('upload');
@@ -72,7 +78,7 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({ isOpen, onClo
       >
         <div className="flex justify-between items-center mb-4">
             <h2 id="imageSelectModalTitle" className="text-xl font-semibold text-pink-400">
-                Chọn Logo Trung Tâm
+                {purposeTitle}
             </h2>
             <button
                 onClick={onClose}
