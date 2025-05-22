@@ -417,14 +417,14 @@ const App: React.FC = () => {
           {winnerHistory.length > 0 ? (
             <ul className="max-h-80 overflow-y-auto space-y-1 pr-1 winner-history-list custom-scrollbar">
               {winnerHistory.map((historyItem, index) => {
-                const isObjectItem = typeof historyItem === 'object' && historyItem !== null && 'isImage' in historyItem;
+                const isObjectItem = typeof historyItem === 'object' && historyItem !== null && 'isImage' in historyItem && historyItem.isImage === true;
                 return (
                   <li 
                     key={index} 
                     className={`text-sm text-slate-300 bg-slate-700/50 p-2 rounded-md truncate ${isObjectItem ? 'flex items-center gap-2' : ''}`}
                   >
                     <span>{index + 1}.</span>
-                    {isObjectItem && historyItem.isImage ? (
+                    {isObjectItem ? (
                       <>
                         <img 
                           src={historyItem.dataURL} 
@@ -434,7 +434,7 @@ const App: React.FC = () => {
                         <span className="truncate">{historyItem.fileName}</span>
                       </>
                     ) : (
-                      <span>{typeof historyItem === 'string' ? historyItem : 'Lỗi mục'}</span>
+                      <span>{typeof historyItem === 'string' ? historyItem : '[Lỗi mục lịch sử]'}</span>
                     )}
                   </li>
                 );
@@ -520,6 +520,7 @@ const App: React.FC = () => {
             canvasSize={calculatedCanvasSize}
             centerImageSrc={centerImageSrc}
             wheelBackgroundImageSrc={wheelBackgroundImageSrc} 
+            onWheelClick={spinWheel} // Pass spinWheel function here
           />
         </div>
 
@@ -710,4 +711,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-    

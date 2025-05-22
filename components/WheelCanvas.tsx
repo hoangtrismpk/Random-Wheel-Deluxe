@@ -10,6 +10,7 @@ interface WheelCanvasProps {
   onSpinComplete?: () => void; // Optional callback
   centerImageSrc?: string | null;
   wheelBackgroundImageSrc?: string | null; // New prop for wheel background
+  onWheelClick?: () => void; // New prop for clicking the wheel
 }
 
 const SEGMENT_COLORS = [
@@ -140,7 +141,7 @@ const drawSegmentImageInternal = (
 
 
 const WheelCanvas: React.FC<WheelCanvasProps> = ({ 
-  names, imageStore, rotationAngle, canvasSize = 500, centerImageSrc, wheelBackgroundImageSrc
+  names, imageStore, rotationAngle, canvasSize = 500, centerImageSrc, wheelBackgroundImageSrc, onWheelClick
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -475,7 +476,19 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
 
   }, [names, rotationAngle, canvasSize, loadedCenterImage, imageStore, loadedSegmentImages, loadedWheelBackgroundImage, wheelBackgroundImageSrc, isIdleAnimating, idleAnimationRotation]); 
 
-  return <canvas ref={canvasRef} className="max-w-full max-h-full aspect-square"></canvas>;
+  const canSpin = names.length > 0 && !isIdleAnimating; // Idle animation implies names.length is 0
+
+  return (
+    <canvas 
+      ref={canvasRef} 
+      onClick={canSpin ? onWheelClick : undefined} 
+      className={`max-w-full max-h-full aspect-square ${canSpin ? 'cursor-pointer' : 'cursor-default'}`}
+      aria-label="Vòng quay may mắn"
+      role="button" // Semantically, it can act as a button
+      tabIndex={canSpin ? 0 : -1} // Make it focusable if it's clickable
+      onKeyDown={canSpin && onWheelClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onWheelClick(); } : undefined}
+    ></canvas>
+  );
 };
 
 export default WheelCanvas;
