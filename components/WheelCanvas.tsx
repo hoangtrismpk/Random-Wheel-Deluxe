@@ -22,8 +22,7 @@ const SEGMENT_COLORS = [
 const TEXT_COLOR = "#1F2937"; 
 const BORDER_COLOR = "#FFFFFF"; 
 const POINTER_COLOR = "#F87171"; 
-const LOGO_DIAMETER = 150;
-const LOGO_RADIUS = LOGO_DIAMETER / 2;
+// LOGO_DIAMETER and LOGO_RADIUS are now dynamic
 
 const MIN_FONT_SIZE = 6;
 
@@ -277,7 +276,7 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
 
     const centerX = canvasSize / 2;
     const centerY = canvasSize / 2;
-    const radius = canvasSize / 2 * 0.9; 
+    const radius = canvasSize / 2 * 0.9; // Radius of the segmented wheel part
 
     ctx.clearRect(0, 0, canvasSize, canvasSize);
     
@@ -384,6 +383,14 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
       }
     }
 
+    // --- Dynamic Logo Size Calculation ---
+    // canvasSize is the full dimension of the canvas element.
+    // The visual "wheel" (segmented part) has a diameter of `radius * 2`, which is `canvasSize * 0.9`.
+    const wheelVisualDiameter = canvasSize * 0.9;
+    const LOGO_DIAMETER = wheelVisualDiameter * 0.25; // Logo is 25% of the visual wheel diameter
+    const LOGO_RADIUS = LOGO_DIAMETER / 2;
+    // --- End Dynamic Logo Size Calculation ---
+
     // Draw Center Logo (always on top of wheel segments or idle animation)
     if (loadedCenterImage) {
         ctx.save(); 
@@ -410,19 +417,21 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
         ctx.beginPath();
         ctx.arc(0, 0, LOGO_RADIUS, 0, 2 * Math.PI);
         ctx.strokeStyle = BORDER_COLOR;
-        ctx.lineWidth = 2.5; 
+        ctx.lineWidth = Math.max(1, LOGO_DIAMETER * 0.03); // Border relative to logo size
         ctx.stroke();
     } else {
         const outerDefaultRadius = LOGO_RADIUS * 0.9;
         const innerDefaultRadius = LOGO_RADIUS * 0.6;
-        ctx.beginPath();
-        ctx.arc(0, 0, outerDefaultRadius, 0, 2 * Math.PI); 
-        ctx.fillStyle = BORDER_COLOR;
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(0, 0, innerDefaultRadius, 0, 2 * Math.PI); 
-        ctx.fillStyle = "#A0A0A0"; 
-        ctx.fill();
+        if (LOGO_DIAMETER > 0) { // Only draw if logo has a size
+            ctx.beginPath();
+            ctx.arc(0, 0, outerDefaultRadius, 0, 2 * Math.PI); 
+            ctx.fillStyle = BORDER_COLOR;
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(0, 0, innerDefaultRadius, 0, 2 * Math.PI); 
+            ctx.fillStyle = "#A0A0A0"; 
+            ctx.fill();
+        }
     }
     
     ctx.restore(); 
@@ -461,15 +470,19 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
     ctx.restore(); 
     
     // Draw pointer (always, for now)
+    const pointerBaseWidth = Math.max(15, canvasSize * 0.03); // Pointer size relative to canvas
+    const pointerHeight = Math.max(25, canvasSize * 0.05);
+    const pointerTipY = pointerHeight * 0.3; // Y-offset for the base of the triangle
+    
     ctx.fillStyle = POINTER_COLOR;
     ctx.beginPath();
-    ctx.moveTo(centerX - 15, 10); 
-    ctx.lineTo(centerX + 15, 10); 
-    ctx.lineTo(centerX, 35);      
+    ctx.moveTo(centerX - pointerBaseWidth, pointerTipY); 
+    ctx.lineTo(centerX + pointerBaseWidth, pointerTipY); 
+    ctx.lineTo(centerX, pointerHeight);      
     ctx.closePath();
     ctx.fill();
     ctx.strokeStyle = BORDER_COLOR;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = Math.max(1, canvasSize * 0.004);
     ctx.stroke();
     
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

@@ -1,14 +1,15 @@
 
 import React from 'react';
-import type { ImageStore } from '../App'; // Assuming ImageStore is exported from App
+import type { ImageStore } from '../App'; 
 
 interface WinnerModalProps {
   isOpen: boolean;
-  winnerName: string | null; // Display name (filename for images, or text)
-  winnerItem: string | null; // Actual item from names array (ID for images, or text)
-  imageStore: ImageStore;    // To look up image data
+  winnerName: string | null; 
+  winnerItem: string | null; 
+  imageStore: ImageStore;    
   onClose: () => void;
   onRemove: () => void;
+  giftDetails?: { title: string; name: string } | null; // Thêm chi tiết quà tặng
 }
 
 const WinnerModal: React.FC<WinnerModalProps> = ({
@@ -17,7 +18,8 @@ const WinnerModal: React.FC<WinnerModalProps> = ({
   winnerItem,
   imageStore,
   onClose,
-  onRemove
+  onRemove,
+  giftDetails
 }) => {
   const getVisuallyNonEmptyName = (name: string | null): string | null => {
     if (!name) return null;
@@ -48,7 +50,9 @@ const WinnerModal: React.FC<WinnerModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <div id="winnerModalTitle" className="flex items-center justify-between p-4 bg-green-600 text-white">
-          <h2 className="text-xl font-semibold">Chúng ta có người chiến thắng!</h2>
+          <h2 className="text-xl font-semibold">
+            {giftDetails ? `Chúc mừng! Bạn đã trúng ${giftDetails.title}!` : 'Chúng ta có người chiến thắng!'}
+          </h2>
           <button
             onClick={onClose}
             className="text-2xl font-bold leading-none hover:text-green-200 transition-colors"
@@ -59,6 +63,11 @@ const WinnerModal: React.FC<WinnerModalProps> = ({
         </div>
 
         <div className="p-6 sm:p-8 text-center">
+          {giftDetails && (
+            <p className="text-2xl font-bold text-yellow-400 mb-3 break-words">
+              "{giftDetails.name}"
+            </p>
+          )}
           {winnerImageAsset ? (
             <div id="winnerModalImageDescription" className="mb-4">
               <img
@@ -66,9 +75,10 @@ const WinnerModal: React.FC<WinnerModalProps> = ({
                 alt={`Người chiến thắng: ${nameForDisplay || 'Ảnh không tên'}`}
                 className="max-w-full max-h-60 mx-auto object-contain rounded-md shadow-lg"
               />
+               {nameForDisplay && <p className="text-xl font-semibold text-slate-200 mt-2">{nameForDisplay}</p>}
             </div>
           ) : (
-            <p
+             <p
               id="winnerModalNameDescription"
               className="text-4xl sm:text-5xl font-extrabold text-white py-4 mb-4 break-words
                          min-h-[60px] sm:min-h-[70px] flex items-center justify-center"
@@ -97,7 +107,7 @@ const WinnerModal: React.FC<WinnerModalProps> = ({
                 : (winnerItem ? "Xóa người chiến thắng đã chọn khỏi danh sách" : "Xóa người chiến thắng khỏi danh sách")
             }
           >
-            Xóa
+            Xóa người trúng
           </button>
         </div>
       </div>

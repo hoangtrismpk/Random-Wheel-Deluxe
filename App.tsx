@@ -4,6 +4,8 @@ import WheelCanvas from './components/WheelCanvas';
 import NameInput from './components/NameInput';
 import WinnerModal from './components/WinnerModal';
 import ImageSelectionModal from './components/ImageSelectionModal';
+import GiftManagement from './components/GiftManagement'; // Component mới
+import type { GiftItem, WinnerHistoryItem, WinnerDetails, GiftAwardHistoryItem, NonGiftWinnerHistoryItem } from './types'; // Kiểu dữ liệu mới
 
 // Easing function: easeOutQuart
 const easeOutQuart = (t: number, b: number, c: number, d: number): number => {
@@ -18,14 +20,6 @@ export interface ImageAsset {
 }
 
 export type ImageStore = Record<string, ImageAsset>;
-
-// Type for items in winner history
-export type WinnerHistoryItem = string | {
-  id: string;
-  dataURL: string;
-  fileName: string;
-  isImage: true;
-};
 
 // Fisher-Yates Shuffle Algorithm Helper
 const shuffleArray = (array: string[]): string[] => {
@@ -42,13 +36,13 @@ const App: React.FC = () => {
   const [names, setNames] = useState<string[]>(['Nguyễn Văn An', 'Trần Thị Bích', 'Lê Minh Cường', 'Phạm Thu Hà', 'Hoàng Đức Hải', 'Vũ Ngọc Lan', 'Đặng Tiến Dũng', 'Bùi Thanh Mai']);
   const [currentRotation, setCurrentRotation] = useState(0); // radians
   const [isSpinning, setIsSpinning] = useState(false);
-  const [selectedName, setSelectedName] = useState<string | null>(null); // For display (filename or text)
-  const [selectedItem, setSelectedItem] = useState<string | null>(null); // Actual ID or text from names array
+  const [selectedName, setSelectedName] = useState<string | null>(null); 
+  const [selectedItem, setSelectedItem] = useState<string | null>(null); 
   const [showConfetti, setShowConfetti] = useState(false);
-  const [spinDuration, setSpinDuration] = useState<number>(10000); // Default 10 seconds
+  const [spinDuration, setSpinDuration] = useState<number>(10000); 
   const [showWinnerModal, setShowWinnerModal] = useState(false);
-  const [winnerHistory, setWinnerHistory] = useState<WinnerHistoryItem[]>([]); // Updated type
-  const [calculatedCanvasSize, setCalculatedCanvasSize] = useState(500);
+  const [winnerHistory, setWinnerHistory] = useState<WinnerHistoryItem[]>([]);
+  const [wheelAreaDimension, setWheelAreaDimension] = useState(500); // Renamed from calculatedCanvasSize
   
   const [centerImageSrc, setCenterImageSrc] = useState<string | null>(null);
   const [wheelBackgroundImageSrc, setWheelBackgroundImageSrc] = useState<string | null>(null);
@@ -63,10 +57,15 @@ const App: React.FC = () => {
   const [autoShuffle, setAutoShuffle] = useState<boolean>(false);
   const [spinJustCompletedWithAutoShuffle, setSpinJustCompletedWithAutoShuffle] = useState<boolean>(false);
 
-  // New UI states
   const [activeTab, setActiveTab] = useState<'nameInput' | 'results'>('nameInput');
   const [isSpinOptionsOpen, setIsSpinOptionsOpen] = useState<boolean>(false);
   const [isWheelCustomizationOpen, setIsWheelCustomizationOpen] = useState<boolean>(false);
+
+  // State cho tính năng danh sách quà
+  const [useGiftList, setUseGiftList] = useState<boolean>(false);
+  const [giftList, setGiftList] = useState<GiftItem[]>([]);
+  const [currentGiftForModal, setCurrentGiftForModal] = useState<{ title: string; name: string } | null>(null);
+  const [copyStatusMessage, setCopyStatusMessage] = useState<string>('');
 
 
   const spinStartRotationRef = useRef(0);
@@ -74,7 +73,8 @@ const App: React.FC = () => {
   const spinStartTimeRef = useRef(0);
   const animationFrameIdRef = useRef<number | null>(null);
   const winnerIndexRef = useRef(0);
-  const confettiTimerRef = useRef<number | null>(null); // Ref for confetti timer
+  const confettiTimerRef = useRef<number | null>(null); 
+  const wheelWrapperRef = useRef<HTMLDivElement>(null); // Ref for the wheel wrapper
 
   useEffect(() => {
     const newParsedNames = priorityNamesInput
@@ -114,22 +114,42 @@ const App: React.FC = () => {
     setNames(prevNames => [...prevNames, id]);
   }, []);
 
+  const getCurrentGiftToSpinFor = (): GiftItem | null => {
+    if (!useGiftList || giftList.length === 0) return null;
+    return giftList.find(gift => gift.quantity > 0) || null;
+  };
 
   const spinWheel = useCallback(() => {
     if (names.length === 0 || isSpinning) return;
 
+    // Scroll to the wheel
+    if (wheelWrapperRef.current) {
+      const elementToScrollTo = wheelWrapperRef.current;
+      requestAnimationFrame(() => {
+        elementToScrollTo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    }
+
+    let currentGiftToAward: GiftItem | null = null;
+    if (useGiftList) {
+      currentGiftToAward = getCurrentGiftToSpinFor();
+      if (!currentGiftToAward) {
+        alert("Tất cả các phần quà đã được trao hoặc danh sách quà trống!");
+        return;
+      }
+    }
+
     setIsSpinning(true);
     setSelectedName(null);
     setSelectedItem(null);
-    // setShowConfetti(false); // Confetti logic moved to useEffect
     setShowWinnerModal(false);
+    setCurrentGiftForModal(null);
     setSpinJustCompletedWithAutoShuffle(false); 
 
     let potentialWinnerIdOrName: string | null = null;
     const actualNameEntries = names.map(nameOrId => imageStore[nameOrId]?.fileName || nameOrId);
 
-
-    if (parsedPriorityNames.length > 0) {
+    if (parsedPriorityNames.length > 0 && (!useGiftList || (useGiftList && currentGiftToAward))) {
       const validPriorityCandidatesOnWheel = actualNameEntries.filter(nameOnWheel =>
         parsedPriorityNames.includes(nameOnWheel)
       );
@@ -147,7 +167,7 @@ const App: React.FC = () => {
         }
       }
     }
-
+    
     if (potentialWinnerIdOrName === null || winnerIndexRef.current < 0 || winnerIndexRef.current >= names.length) { 
       winnerIndexRef.current = Math.floor(Math.random() * names.length);
     }
@@ -162,7 +182,6 @@ const App: React.FC = () => {
     const randomFactor = Math.random() * 0.8 + 0.1; 
     const randomOffsetWithinSegment = (randomFactor - 0.5) * anglePerSegment; 
     let targetAngle = targetAngleForSegmentMiddle - randomOffsetWithinSegment;
-
 
     const MIN_ADDITIONAL_ROTATIONS = 6;
     let totalTargetRotation = currentRotation + MIN_ADDITIONAL_ROTATIONS * 2 * Math.PI;
@@ -199,22 +218,43 @@ const App: React.FC = () => {
             setSelectedName(trimmedWinnerDisplayName); 
             setSelectedItem(winnerIdOrName); 
             
-            if (winnerImageAsset) {
+            const winnerDetails: WinnerDetails = {
+              id: winnerIdOrName,
+              displayName: trimmedWinnerDisplayName,
+              isImage: !!winnerImageAsset,
+              imageDataURL: winnerImageAsset?.dataURL,
+            };
+
+            if (useGiftList && currentGiftToAward) {
+              setCurrentGiftForModal({ title: currentGiftToAward.title, name: currentGiftToAward.giftName });
               setWinnerHistory(prevHistory => [
                 ...prevHistory, 
                 { 
-                  id: winnerIdOrName, 
-                  dataURL: winnerImageAsset.dataURL, 
-                  fileName: winnerImageAsset.fileName, 
-                  isImage: true 
+                  type: 'gift',
+                  giftTitle: currentGiftToAward.title,
+                  giftAwardedName: currentGiftToAward.giftName,
+                  winner: winnerDetails,
+                  timestamp: Date.now()
                 }
               ]);
+              // Cập nhật số lượng quà
+              setGiftList(prevGifts => prevGifts.map(gift => 
+                gift.id === currentGiftToAward!.id 
+                ? { ...gift, quantity: gift.quantity - 1 }
+                : gift
+              ));
             } else {
-              setWinnerHistory(prevHistory => [...prevHistory, winnerIdOrName]);
+              setWinnerHistory(prevHistory => [
+                ...prevHistory, 
+                {
+                  type: 'standard',
+                  winner: winnerDetails,
+                  timestamp: Date.now()
+                }
+              ]);
             }
-
             setShowWinnerModal(true);
-            setShowConfetti(true); // Trigger confetti
+            setShowConfetti(true); 
         } else {
             console.warn("Spin resulted in an invalid or empty winner name. Modal not shown.");
             setSelectedName(null);
@@ -240,9 +280,9 @@ const App: React.FC = () => {
     };
 
     animationFrameIdRef.current = requestAnimationFrame(animate);
-  }, [names, isSpinning, currentRotation, spinDuration, parsedPriorityNames, imageStore, autoShuffle]);
+  }, [names, isSpinning, currentRotation, spinDuration, parsedPriorityNames, imageStore, autoShuffle, useGiftList, giftList, handleNamesUpdate]);
 
-  // Effect for managing auto-shuffle after spin
+
   useEffect(() => {
     if (spinJustCompletedWithAutoShuffle && !isSpinning) { 
       const shuffledNames = shuffleArray([...names]);
@@ -251,10 +291,9 @@ const App: React.FC = () => {
     }
   }, [spinJustCompletedWithAutoShuffle, names, handleNamesUpdate, isSpinning]);
 
-  // Effect for managing confetti lifecycle
+
   useEffect(() => {
     if (showWinnerModal && showConfetti) {
-      // If modal is shown and confetti flag is true, start the timer
       if (confettiTimerRef.current) {
         clearTimeout(confettiTimerRef.current);
       }
@@ -262,15 +301,12 @@ const App: React.FC = () => {
         setShowConfetti(false);
       }, 6000);
     } else if (!showWinnerModal && showConfetti) {
-      // If modal is closed but confetti flag was still true, turn it off immediately
       setShowConfetti(false);
       if (confettiTimerRef.current) {
         clearTimeout(confettiTimerRef.current);
         confettiTimerRef.current = null;
       }
     }
-
-    // Cleanup timer on unmount or if dependencies change before timer fires
     return () => {
       if (confettiTimerRef.current) {
         clearTimeout(confettiTimerRef.current);
@@ -280,18 +316,30 @@ const App: React.FC = () => {
 
 
   useEffect(() => {
-    const updateCanvasSize = () => {
-        const maxWidthPercentage = window.innerWidth < 1024 ? 0.9 : 0.55;
-        const availableWidth = window.innerWidth * maxWidthPercentage;
-        const availableHeight = window.innerHeight * 0.7;
+    const updateWheelAreaDimension = () => {
+        let targetContainerWidth;
+        let maxHeightConstraint;
+        const availableHeight = window.innerHeight;
+        const verticalPadding = 40; 
+        const minSize = 250;
 
-        const newSize = Math.max(250, Math.min(800, availableWidth - 40, availableHeight - 40));
-        setCalculatedCanvasSize(newSize);
+        if (window.innerWidth < 1024) { // Mobile
+            targetContainerWidth = window.innerWidth * 0.95;
+            maxHeightConstraint = availableHeight * 0.70 - verticalPadding;
+        } else { // Desktop (window.innerWidth >= 1024)
+            targetContainerWidth = window.innerWidth * 0.55; 
+            maxHeightConstraint = availableHeight * 0.80 - verticalPadding; 
+        }
+
+        let newSize = Math.min(targetContainerWidth, maxHeightConstraint);
+        newSize = Math.max(minSize, newSize); 
+
+        setWheelAreaDimension(newSize);
     };
-    updateCanvasSize();
-    window.addEventListener('resize', updateCanvasSize);
+    updateWheelAreaDimension();
+    window.addEventListener('resize', updateWheelAreaDimension);
     return () => {
-        window.removeEventListener('resize', updateCanvasSize);
+        window.removeEventListener('resize', updateWheelAreaDimension);
         if (animationFrameIdRef.current) {
             cancelAnimationFrame(animationFrameIdRef.current);
         }
@@ -300,7 +348,7 @@ const App: React.FC = () => {
 
   const handleCloseWinnerModal = useCallback(() => {
     setShowWinnerModal(false);
-    // setShowConfetti(false); // Confetti is now handled by the useEffect
+    setCurrentGiftForModal(null);
   }, []);
 
   useEffect(() => {
@@ -341,10 +389,12 @@ const App: React.FC = () => {
       }
     }
     setShowWinnerModal(false);
+    setCurrentGiftForModal(null);
   };
   
   const handleClearWinnerHistory = () => {
     setWinnerHistory([]);
+    setCopyStatusMessage('');
   };
 
   const handleImageSelected = (src: string) => {
@@ -384,6 +434,65 @@ const App: React.FC = () => {
     setImageSelectionPurpose(purpose);
     setIsImageModalOpen(true);
   };
+  
+  const getSpinButtonText = () => {
+    if (isSpinning) return 'Đang quay...';
+    if (useGiftList) {
+      const currentGift = getCurrentGiftToSpinFor();
+      if (currentGift) return `QUAY CHO "${currentGift.title}"!`;
+      return 'Hết Quà!';
+    }
+    return 'QUAY!';
+  };
+
+  const isSpinDisabled = () => {
+    if (isSpinning || names.length === 0) return true;
+    if (useGiftList && !getCurrentGiftToSpinFor()) return true;
+    return false;
+  };
+
+  const sanitizeForTSV = (text: string | undefined): string => {
+    if (text === undefined || text === null) return '';
+    return text.toString().replace(/\t/g, ' ').replace(/\n/g, ' ').replace(/\r/g, ' ');
+  };
+
+  const handleCopyResults = async () => {
+    if (winnerHistory.length === 0) {
+      setCopyStatusMessage("Không có kết quả để sao chép.");
+      setTimeout(() => setCopyStatusMessage(''), 3000);
+      return;
+    }
+
+    const header = "Loại Giải thưởng\tTên Phần Quà\tNgười Trúng\tLà Hình Ảnh\tThời Gian\n";
+    const rows = winnerHistory.map(item => {
+      const timestamp = new Date(item.timestamp).toLocaleString('vi-VN', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false
+      });
+      const isImage = item.winner.isImage ? "Có" : "Không";
+      const winnerName = sanitizeForTSV(item.winner.displayName);
+
+      if (item.type === 'gift') {
+        const giftTitle = sanitizeForTSV(item.giftTitle);
+        const giftAwardedName = sanitizeForTSV(item.giftAwardedName);
+        return `${giftTitle}\t${giftAwardedName}\t${winnerName}\t${isImage}\t${timestamp}`;
+      } else {
+        return `Vòng Quay Thường\t-\t${winnerName}\t${isImage}\t${timestamp}`;
+      }
+    }).join('\n');
+
+    const tsvContent = header + rows;
+
+    try {
+      await navigator.clipboard.writeText(tsvContent);
+      setCopyStatusMessage("Đã sao chép kết quả vào clipboard!");
+    } catch (err) {
+      console.error('Lỗi sao chép vào clipboard:', err);
+      setCopyStatusMessage("Lỗi: Không thể sao chép.");
+    }
+    setTimeout(() => setCopyStatusMessage(''), 3000);
+  };
 
   const renderTabContent = () => {
     if (activeTab === 'nameInput') {
@@ -401,45 +510,105 @@ const App: React.FC = () => {
       );
     }
     if (activeTab === 'results') {
+      const groupedHistory: Record<string, GiftAwardHistoryItem[]> = {};
+      const standardHistory: NonGiftWinnerHistoryItem[] = [];
+
+      winnerHistory.forEach(item => {
+        if (item.type === 'gift') {
+          if (!groupedHistory[item.giftTitle]) {
+            groupedHistory[item.giftTitle] = [];
+          }
+          groupedHistory[item.giftTitle].push(item as GiftAwardHistoryItem);
+        } else {
+          standardHistory.push(item as NonGiftWinnerHistoryItem);
+        }
+      });
+      
+      // Sắp xếp các mục trong mỗi nhóm theo thời gian (mới nhất trước)
+      for (const title in groupedHistory) {
+        groupedHistory[title].sort((a, b) => b.timestamp - a.timestamp);
+      }
+      standardHistory.sort((a, b) => b.timestamp - a.timestamp);
+
+
       return (
         <>
-          <div className="flex justify-between items-center mb-3">
+          <div className="flex flex-wrap justify-between items-center mb-3 gap-2">
             <h2 className="text-2xl font-bold text-pink-400">Kết Quả Quay</h2>
-            <button
-              onClick={handleClearWinnerHistory}
-              disabled={winnerHistory.length === 0 || isSpinning}
-              className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 py-1 px-3 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              aria-label="Xóa lịch sử kết quả"
-            >
-              Xóa Kết Quả
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleCopyResults}
+                disabled={winnerHistory.length === 0 || isSpinning}
+                className="text-xs bg-sky-600 hover:bg-sky-500 text-white py-1.5 px-3 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Sao chép kết quả quay"
+              >
+                Sao chép Kết quả
+              </button>
+              <button
+                onClick={handleClearWinnerHistory}
+                disabled={winnerHistory.length === 0 || isSpinning}
+                className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 py-1.5 px-3 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Xóa lịch sử kết quả"
+              >
+                Xóa Kết Quả
+              </button>
+            </div>
           </div>
+           {copyStatusMessage && (
+            <p className={`text-sm text-center mb-2 ${copyStatusMessage.includes('Lỗi') ? 'text-red-400' : 'text-green-400'}`}
+               aria-live="assertive">
+              {copyStatusMessage}
+            </p>
+          )}
           {winnerHistory.length > 0 ? (
-            <ul className="max-h-80 overflow-y-auto space-y-1 pr-1 winner-history-list custom-scrollbar">
-              {winnerHistory.map((historyItem, index) => {
-                const isObjectItem = typeof historyItem === 'object' && historyItem !== null && 'isImage' in historyItem && historyItem.isImage === true;
-                return (
-                  <li 
-                    key={index} 
-                    className={`text-sm text-slate-300 bg-slate-700/50 p-2 rounded-md truncate ${isObjectItem ? 'flex items-center gap-2' : ''}`}
-                  >
-                    <span>{index + 1}.</span>
-                    {isObjectItem ? (
-                      <>
-                        <img 
-                          src={historyItem.dataURL} 
-                          alt={historyItem.fileName} 
-                          className="w-6 h-6 object-cover rounded-full flex-shrink-0"
-                        />
-                        <span className="truncate">{historyItem.fileName}</span>
-                      </>
-                    ) : (
-                      <span>{typeof historyItem === 'string' ? historyItem : '[Lỗi mục lịch sử]'}</span>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+            <div className="max-h-80 overflow-y-auto space-y-2 pr-1 winner-history-list custom-scrollbar">
+              {Object.entries(groupedHistory).map(([giftTitle, items]) => (
+                <div key={giftTitle} className="mb-3">
+                  <h3 className="text-lg font-semibold text-sky-400 mb-1 sticky top-0 bg-slate-800 py-1">{giftTitle}</h3>
+                  <ul className="space-y-1 pl-2">
+                    {items.map((item, index) => (
+                      <li 
+                        key={`${item.timestamp}-${index}`} 
+                        className="text-sm text-slate-300 bg-slate-700/50 p-2 rounded-md flex items-center gap-2"
+                      >
+                        {item.winner.isImage ? (
+                          <img 
+                            src={item.winner.imageDataURL} 
+                            alt={item.winner.displayName} 
+                            className="w-6 h-6 object-cover rounded-full flex-shrink-0"
+                          />
+                        ) : <span className="w-6 h-6 flex-shrink-0 text-center">👤</span>}
+                        <span className="truncate flex-grow">
+                          {item.winner.displayName} (<span className="italic text-slate-400">{item.giftAwardedName}</span>)
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+              {standardHistory.length > 0 && (
+                 <div className="mb-3">
+                  {Object.keys(groupedHistory).length > 0 && <h3 className="text-lg font-semibold text-sky-400 mb-1 sticky top-0 bg-slate-800 py-1">Vòng quay thường</h3>}
+                  <ul className="space-y-1 pl-2">
+                  {standardHistory.map((item, index) => (
+                     <li 
+                        key={`${item.timestamp}-${index}`} 
+                        className="text-sm text-slate-300 bg-slate-700/50 p-2 rounded-md flex items-center gap-2"
+                      >
+                        {item.winner.isImage ? (
+                          <img 
+                            src={item.winner.imageDataURL} 
+                            alt={item.winner.displayName} 
+                            className="w-6 h-6 object-cover rounded-full flex-shrink-0"
+                          />
+                        ) : <span className="w-6 h-6 flex-shrink-0 text-center">👤</span> }
+                        <span className="truncate flex-grow">{item.winner.displayName}</span>
+                      </li>
+                  ))}
+                  </ul>
+                 </div>
+              )}
+            </div>
           ) : (
             <p className="text-sm text-slate-500 text-center py-2">Chưa có kết quả. Hãy quay vòng quay!</p>
           )}
@@ -465,8 +634,8 @@ const App: React.FC = () => {
           className="w-full flex justify-between items-center p-4 text-lg font-semibold text-pink-400 hover:bg-slate-700/50 rounded-t-xl focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 focus:ring-offset-slate-800"
         >
           <span>{title}</span>
-          <span className="transform transition-transform duration-200">
-            {isOpen ? '▲' : '▼'}
+          <span className={`transform transition-transform duration-200 ${isOpen ? 'rotate-180' : 'rotate-0'}`}>
+            ▼
           </span>
         </button>
         {isOpen && (
@@ -512,20 +681,23 @@ const App: React.FC = () => {
       </header>
 
       <main className="flex flex-col lg:flex-row items-start justify-around w-full max-w-screen-2xl gap-6 lg:gap-10">
-        <div className="relative flex-shrink-0 w-full lg:w-auto aspect-square mx-auto lg:mx-0" style={{maxWidth: `${calculatedCanvasSize}px`, maxHeight: `${calculatedCanvasSize}px` }}>
+        <div 
+            ref={wheelWrapperRef} // Assign ref here
+            className="relative flex-shrink-0 w-full lg:w-auto aspect-square mx-auto lg:mx-0" 
+            style={{maxWidth: `${wheelAreaDimension}px`, maxHeight: `${wheelAreaDimension}px` }}
+        >
           <WheelCanvas
             names={names}
             imageStore={imageStore}
             rotationAngle={currentRotation}
-            canvasSize={calculatedCanvasSize}
+            canvasSize={wheelAreaDimension * 0.9} // Canvas is 90% of the container
             centerImageSrc={centerImageSrc}
             wheelBackgroundImageSrc={wheelBackgroundImageSrc} 
-            onWheelClick={spinWheel} // Pass spinWheel function here
+            onWheelClick={spinWheel}
           />
         </div>
 
         <div className="flex flex-col items-center space-y-5 w-full lg:max-w-md xl:max-w-lg">
-          {/* Tab Navigation */}
           <div className="w-full grid grid-cols-2 border-b border-slate-700 mb-0">
             <button
               onClick={() => setActiveTab('nameInput')}
@@ -551,18 +723,17 @@ const App: React.FC = () => {
             </button>
           </div>
           
-          {/* Tab Content Area */}
           <div className="w-full p-6 bg-slate-800 rounded-b-xl shadow-2xl">
             {renderTabContent()}
           </div>
           
           <button
             onClick={spinWheel}
-            disabled={isSpinning || names.length === 0}
+            disabled={isSpinDisabled()}
             className="w-full bg-gradient-to-r from-green-400 to-blue-500 hover:from-green-500 hover:to-blue-600 text-white font-bold text-2xl py-4 px-6 rounded-xl shadow-xl hover:shadow-2xl transform hover:scale-105 transition duration-150 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none"
             aria-label="Quay vòng may mắn"
           >
-            {isSpinning ? 'Đang quay...' : 'QUAY!'}
+            {getSpinButtonText()}
           </button>
 
           {showPriorityInputSection && (
@@ -591,7 +762,7 @@ const App: React.FC = () => {
           )}
           
           {renderCollapsibleSection("Tùy Chọn Quay", isSpinOptionsOpen, setIsSpinOptionsOpen, "spinOptionsContent", (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="flex justify-around items-center mb-3">
                 {spinDurationsOptions.map((sec) => {
                   const durationValue = sec * 1000;
@@ -632,6 +803,25 @@ const App: React.FC = () => {
                 />
                 <span>Tự động trộn danh sách sau mỗi lần quay</span>
               </label>
+              {/* Checkbox for Gift List */}
+              <label htmlFor="useGiftListCheckbox" className="flex items-center justify-center space-x-2 text-slate-300 cursor-pointer p-2 rounded-md hover:bg-slate-700 transition-colors">
+                <input
+                  type="checkbox"
+                  id="useGiftListCheckbox"
+                  checked={useGiftList}
+                  onChange={(e) => setUseGiftList(e.target.checked)}
+                  disabled={isSpinning}
+                  className="form-checkbox h-5 w-5 text-pink-600 bg-slate-700 border-slate-500 rounded focus:ring-pink-500 focus:ring-offset-slate-800 disabled:opacity-60"
+                />
+                <span>Nhập danh sách quà</span>
+              </label>
+              {useGiftList && (
+                <GiftManagement
+                  giftList={giftList}
+                  setGiftList={setGiftList}
+                  isSpinning={isSpinning}
+                />
+              )}
             </div>
           ))}
           
@@ -689,6 +879,7 @@ const App: React.FC = () => {
         imageStore={imageStore}   
         onClose={handleCloseWinnerModal}
         onRemove={handleRemoveWinner}
+        giftDetails={currentGiftForModal}
       />
 
       <ImageSelectionModal
