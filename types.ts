@@ -39,3 +39,40 @@ export interface NonGiftWinnerHistoryItem {
 
 // Kiểu kết hợp cho một mục trong lịch sử người chiến thắng
 export type WinnerHistoryItem = GiftAwardHistoryItem | NonGiftWinnerHistoryItem;
+
+// Interface for boosted win rate participants
+export interface BoostedParticipant {
+  id: string;
+  name: string; // Name to match against wheel entries (case-insensitive, trimmed)
+  percentage: number; // Percentage value (0-99)
+}
+
+// Types for dynamic wheel background color
+export interface GradientColorStop {
+  id?: string; // For React key, optional as it's mainly for UI editing state
+  color: string;
+  position: number; // Percentage (0-100)
+}
+
+export interface LinearGradientBackgroundConfig {
+  type: 'linear-gradient';
+  angle: number; // Degrees (0-360)
+  stops: GradientColorStop[];
+}
+
+// Represents a solid color (string like '#RRGGBB') or a gradient configuration, or null for default
+export type WheelDynamicBackground = string | LinearGradientBackgroundConfig | null;
+
+// Types for global application background customization
+export interface RadialGradientBackgroundConfig {
+  type: 'radial-gradient';
+  shape: 'circle' | 'ellipse';
+  position: string; // e.g., 'center', 'top left', '50% 50%'
+  stops: GradientColorStop[];
+}
+
+export type AppGlobalBackground = 
+  | string // Solid color
+  | LinearGradientBackgroundConfig
+  | RadialGradientBackgroundConfig
+  | null; // Null means use default Tailwind classes

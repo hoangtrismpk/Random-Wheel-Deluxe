@@ -5,7 +5,12 @@ import NameInput from './components/NameInput';
 import WinnerModal from './components/WinnerModal';
 import ImageSelectionModal from './components/ImageSelectionModal';
 import GiftManagement from './components/GiftManagement'; // Component mới
-import type { GiftItem, WinnerHistoryItem, WinnerDetails, GiftAwardHistoryItem, NonGiftWinnerHistoryItem } from './types'; // Kiểu dữ liệu mới
+import ConfirmationModal from './components/ConfirmationModal'; // Import ConfirmationModal
+import BoostWinRateInput from './components/BoostWinRateInput'; // Import BoostWinRateInput
+import WheelBackgroundColorPicker from './components/WheelBackgroundColorPicker'; // Import new component
+import AppBackgroundColorPicker from './components/AppBackgroundColorPicker'; // Import new component for global background
+import type { GiftItem, WinnerHistoryItem, WinnerDetails, GiftAwardHistoryItem, NonGiftWinnerHistoryItem, BoostedParticipant, WheelDynamicBackground, AppGlobalBackground } from './types'; // Kiểu dữ liệu mới
+import { useNotification } from './components/NotificationContext'; // Import useNotification
 
 // Easing function: easeOutQuart
 const easeOutQuart = (t: number, b: number, c: number, d: number): number => {
@@ -46,6 +51,8 @@ const App: React.FC = () => {
   
   const [centerImageSrc, setCenterImageSrc] = useState<string | null>(null);
   const [wheelBackgroundImageSrc, setWheelBackgroundImageSrc] = useState<string | null>(null);
+  const [wheelDynamicBackground, setWheelDynamicBackground] = useState<WheelDynamicBackground>(null); 
+  const [appGlobalBackground, setAppGlobalBackground] = useState<AppGlobalBackground>(null); // For global app background
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [imageSelectionPurpose, setImageSelectionPurpose] = useState<'centerLogo' | 'wheelBackground' | null>(null);
 
@@ -60,12 +67,21 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'nameInput' | 'results'>('nameInput');
   const [isSpinOptionsOpen, setIsSpinOptionsOpen] = useState<boolean>(false);
   const [isWheelCustomizationOpen, setIsWheelCustomizationOpen] = useState<boolean>(false);
+  const [isAppAppearanceOpen, setIsAppAppearanceOpen] = useState<boolean>(false); // For global appearance
+  const [isBoostWinRateOpen, setIsBoostWinRateOpen] = useState<boolean>(false); // State for new section
 
   // State cho tính năng danh sách quà
   const [useGiftList, setUseGiftList] = useState<boolean>(false);
   const [giftList, setGiftList] = useState<GiftItem[]>([]);
   const [currentGiftForModal, setCurrentGiftForModal] = useState<{ title: string; name: string } | null>(null);
-  const [copyStatusMessage, setCopyStatusMessage] = useState<string>('');
+  
+  const { addNotification } = useNotification(); // Hook for notifications
+
+  // State for confirmation modal for clearing history
+  const [showClearHistoryConfirmModal, setShowClearHistoryConfirmModal] = useState(false);
+
+  // State for Boost Win Rate
+  const [boostedParticipants, setBoostedParticipants] = useState<BoostedParticipant[]>([]);
 
 
   const spinStartRotationRef = useRef(0);
@@ -75,6 +91,54 @@ const App: React.FC = () => {
   const winnerIndexRef = useRef(0);
   const confettiTimerRef = useRef<number | null>(null); 
   const wheelWrapperRef = useRef<HTMLDivElement>(null); // Ref for the wheel wrapper
+  const appContainerRef = useRef<HTMLDivElement>(null); // Ref for the main app container
+  const winSoundRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    winSoundRef.current = new Audio("https://irace.vn/wp-content/uploads/2025/05/vo-tay.mp3");
+    winSoundRef.current.preload = "auto";
+    winSoundRef.current.onerror = () => {
+        // console.error("Error loading win sound.");
+    };
+  }, []);
+
+  // Effect to apply global background changes
+  useEffect(() => {
+    if (appContainerRef.current) {
+      const baseClasses = "min-h-screen text-slate-100 flex flex-col items-center p-4 space-y-6";
+      const defaultBgClasses = ['bg-gradient-to-br', 'from-slate-900', 'via-purple-900', 'to-slate-900'];
+      
+      // Remove all potential background classes first
+      appContainerRef.current.classList.remove(...defaultBgClasses);
+      appContainerRef.current.style.background = '';
+
+
+      if (appGlobalBackground === null) {
+        appContainerRef.current.classList.add(...defaultBgClasses);
+        appContainerRef.current.className = `${baseClasses} ${defaultBgClasses.join(' ')}`;
+      } else if (typeof appGlobalBackground === 'string') { // Solid color
+        appContainerRef.current.style.background = appGlobalBackground;
+        appContainerRef.current.className = baseClasses;
+      } else if (appGlobalBackground.type === 'linear-gradient') {
+        const stopsString = appGlobalBackground.stops
+          .sort((a, b) => a.position - b.position)
+          .map(stop => `${stop.color} ${stop.position}%`)
+          .join(', ');
+        appContainerRef.current.style.background = `linear-gradient(${appGlobalBackground.angle}deg, ${stopsString})`;
+        appContainerRef.current.className = baseClasses;
+      } else if (appGlobalBackground.type === 'radial-gradient') {
+        const stopsString = appGlobalBackground.stops
+          .sort((a, b) => a.position - b.position)
+          .map(stop => `${stop.color} ${stop.position}%`)
+          .join(', ');
+        const shape = appGlobalBackground.shape || 'circle';
+        const position = appGlobalBackground.position || 'center';
+        appContainerRef.current.style.background = `radial-gradient(${shape} at ${position}, ${stopsString})`;
+        appContainerRef.current.className = baseClasses;
+      }
+    }
+  }, [appGlobalBackground]);
+
 
   useEffect(() => {
     const newParsedNames = priorityNamesInput
@@ -122,7 +186,6 @@ const App: React.FC = () => {
   const spinWheel = useCallback(() => {
     if (names.length === 0 || isSpinning) return;
 
-    // Scroll to the wheel
     if (wheelWrapperRef.current) {
       const elementToScrollTo = wheelWrapperRef.current;
       requestAnimationFrame(() => {
@@ -134,7 +197,7 @@ const App: React.FC = () => {
     if (useGiftList) {
       currentGiftToAward = getCurrentGiftToSpinFor();
       if (!currentGiftToAward) {
-        alert("Tất cả các phần quà đã được trao hoặc danh sách quà trống!");
+        addNotification("Tất cả các phần quà đã được trao hoặc danh sách quà trống!", 'info');
         return;
       }
     }
@@ -146,52 +209,149 @@ const App: React.FC = () => {
     setCurrentGiftForModal(null);
     setSpinJustCompletedWithAutoShuffle(false); 
 
-    let potentialWinnerIdOrName: string | null = null;
-    const actualNameEntries = names.map(nameOrId => imageStore[nameOrId]?.fileName || nameOrId);
+    let chosenWinnerIndex = -1;
 
-    if (parsedPriorityNames.length > 0 && (!useGiftList || (useGiftList && currentGiftToAward))) {
-      const validPriorityCandidatesOnWheel = actualNameEntries.filter(nameOnWheel =>
-        parsedPriorityNames.includes(nameOnWheel)
+    const wheelItemsWithDetails = names.map((nameOrId, index) => ({
+      originalIdOrName: nameOrId,
+      displayName: (imageStore[nameOrId]?.fileName || nameOrId).trim().toLowerCase(),
+      originalIndex: index,
+    }));
+
+    // 1. Priority Names Check
+    if (parsedPriorityNames.length > 0) {
+      const validPriorityCandidatesOnWheel = wheelItemsWithDetails.filter(item =>
+        parsedPriorityNames.some(priorityName => 
+          item.displayName === priorityName.trim().toLowerCase()
+        )
       );
-
       if (validPriorityCandidatesOnWheel.length > 0) {
-        const winningNameFromPriorityList = validPriorityCandidatesOnWheel[
+        const winningPriorityItem = validPriorityCandidatesOnWheel[
           Math.floor(Math.random() * validPriorityCandidatesOnWheel.length)
         ];
-        const determinedWinnerIndex = actualNameEntries.indexOf(winningNameFromPriorityList);
+        chosenWinnerIndex = winningPriorityItem.originalIndex;
+      }
+    }
 
-        if (determinedWinnerIndex !== -1) {
-          winnerIndexRef.current = determinedWinnerIndex;
-        } else {
-          potentialWinnerIdOrName = null; 
+    // 2. Boost Win Rate Check (if no priority winner found)
+    if (chosenWinnerIndex === -1 && boostedParticipants.length > 0) {
+      const validBoostedOnWheel = boostedParticipants
+        .map(bp => {
+          const wheelItem = wheelItemsWithDetails.find(item => item.displayName === bp.name.trim().toLowerCase());
+          return wheelItem ? { ...bp, originalIndex: wheelItem.originalIndex } : null;
+        })
+        .filter(bpOrNull => bpOrNull !== null && bpOrNull.percentage > 0 && bpOrNull.percentage < 100) as (BoostedParticipant & { originalIndex: number })[];
+
+      const totalBoostedPercentage = validBoostedOnWheel.reduce((sum, bp) => sum + bp.percentage, 0);
+
+      if (totalBoostedPercentage > 0 && totalBoostedPercentage < 100) {
+        const randomNumber = Math.random() * 100; // 0 to 99.999...
+        let cumulativePercentage = 0;
+
+        // Assign boosted winners first
+        for (const boostedItem of validBoostedOnWheel) {
+          cumulativePercentage += boostedItem.percentage;
+          if (randomNumber < cumulativePercentage) {
+            chosenWinnerIndex = boostedItem.originalIndex;
+            break;
+          }
+        }
+
+        // If winner is not among boosted, pick from non-boosted
+        if (chosenWinnerIndex === -1) { 
+          const nonBoostedOnWheel = wheelItemsWithDetails.filter(item => 
+            !validBoostedOnWheel.some(bp => bp.originalIndex === item.originalIndex)
+          );
+          if (nonBoostedOnWheel.length > 0) {
+            chosenWinnerIndex = nonBoostedOnWheel[Math.floor(Math.random() * nonBoostedOnWheel.length)].originalIndex;
+          } else if (validBoostedOnWheel.length > 0 && nonBoostedOnWheel.length === 0) {
+             chosenWinnerIndex = validBoostedOnWheel[Math.floor(Math.random() * validBoostedOnWheel.length)].originalIndex;
+          }
         }
       }
     }
     
-    if (potentialWinnerIdOrName === null || winnerIndexRef.current < 0 || winnerIndexRef.current >= names.length) { 
-      winnerIndexRef.current = Math.floor(Math.random() * names.length);
+    // 3. Standard Random Selection (if no priority or valid boosted winner determined by above logic)
+    if (chosenWinnerIndex === -1) {
+      if (names.length > 0) {
+        chosenWinnerIndex = Math.floor(Math.random() * names.length);
+      } else {
+        setIsSpinning(false);
+        return;
+      }
     }
     
-    const numSegments = names.length;
-    const anglePerSegment = (2 * Math.PI) / numSegments;
+    winnerIndexRef.current = chosenWinnerIndex;
+    
+    let effectiveProbabilities: Array<{ nameOrId: string; probability: number }> = [];
+    const validBoostedForSpin = boostedParticipants
+        .map(bp => {
+            const wheelItem = wheelItemsWithDetails.find(item => item.displayName === bp.name.trim().toLowerCase());
+            return wheelItem ? { ...bp, originalIdOrName: wheelItem.originalIdOrName } : null;
+        })
+        .filter(bpOrNull => bpOrNull !== null && bpOrNull.percentage > 0 && bpOrNull.percentage < 100) as Array<BoostedParticipant & { originalIdOrName: string }>;
+    
+    const totalBoostedPercentageForSpin = validBoostedForSpin.reduce((sum, bp) => sum + bp.percentage, 0);
+    const isBoostConfigValidForSpin = totalBoostedPercentageForSpin > 0 && totalBoostedPercentageForSpin < 100 && validBoostedForSpin.length > 0;
 
-    const desiredFinalAngleOfSegment = -Math.PI / 2; 
-    const segmentMiddleAngle = (winnerIndexRef.current * anglePerSegment) + (anglePerSegment / 2);
-    let targetAngleForSegmentMiddle = desiredFinalAngleOfSegment - segmentMiddleAngle;
+    if (isBoostConfigValidForSpin) {
+        const remainingPercentage = 100 - totalBoostedPercentageForSpin;
+        const nonBoostedOnWheel = wheelItemsWithDetails.filter(item => !validBoostedForSpin.some(bp => bp.originalIdOrName === item.originalIdOrName));
+        const numNonBoosted = nonBoostedOnWheel.length;
+        const probPerNonBoosted = numNonBoosted > 0 ? remainingPercentage / numNonBoosted / 100 : 0;
 
-    const randomFactor = Math.random() * 0.8 + 0.1; 
-    const randomOffsetWithinSegment = (randomFactor - 0.5) * anglePerSegment; 
-    let targetAngle = targetAngleForSegmentMiddle - randomOffsetWithinSegment;
+        names.forEach(nameOrId => {
+            const boostedEntry = validBoostedForSpin.find(bp => bp.originalIdOrName === nameOrId);
+            if (boostedEntry) {
+                effectiveProbabilities.push({ nameOrId, probability: boostedEntry.percentage / 100 });
+            } else if (nonBoostedOnWheel.some(nb => nb.originalIdOrName === nameOrId) && probPerNonBoosted > 0) {
+                effectiveProbabilities.push({ nameOrId, probability: probPerNonBoosted });
+            }
+        });
+    } else {
+        const probPerSegment = names.length > 0 ? 1 / names.length : 0;
+        names.forEach(nameOrId => effectiveProbabilities.push({ nameOrId, probability: probPerSegment }));
+    }
+    
+    effectiveProbabilities = effectiveProbabilities.filter(p => p.probability > 1e-9);
+    const totalProbSum = effectiveProbabilities.reduce((sum, p) => sum + p.probability, 0);
+    if (effectiveProbabilities.length > 0 && totalProbSum > 0 && Math.abs(totalProbSum - 1.0) > 1e-9) {
+        effectiveProbabilities = effectiveProbabilities.map(p => ({ ...p, probability: p.probability / totalProbSum }));
+    }
+
+    let cumulativeAngle = 0;
+    let winnerSegmentStartAngle = 0;
+    let winnerSegmentAngleSpan = 0;
+
+    for (let i = 0; i < effectiveProbabilities.length; i++) {
+        const participantProb = effectiveProbabilities[i];
+        const segmentAngleSpan = participantProb.probability * 2 * Math.PI;
+        if (names[winnerIndexRef.current] === participantProb.nameOrId) {
+            winnerSegmentStartAngle = cumulativeAngle;
+            winnerSegmentAngleSpan = segmentAngleSpan;
+            break; 
+        }
+        cumulativeAngle += segmentAngleSpan;
+    }
+    
+    if (winnerSegmentAngleSpan === 0 && names.length > 0) {
+        const fallbackAnglePerSegment = (2 * Math.PI) / names.length;
+        winnerSegmentStartAngle = winnerIndexRef.current * fallbackAnglePerSegment;
+        winnerSegmentAngleSpan = fallbackAnglePerSegment;
+    }
+
+    const desiredFinalAngleOfPointer = -Math.PI / 2; 
+    const segmentMiddleAngleOnWheel = winnerSegmentStartAngle + winnerSegmentAngleSpan / 2;
+    let targetAngleForSegmentMiddleToAlignWithPointer = desiredFinalAngleOfPointer - segmentMiddleAngleOnWheel;
+    const randomFactor = Math.random() * 0.6 + 0.2; 
+    const randomOffsetWithinSegment = (randomFactor - 0.5) * winnerSegmentAngleSpan; 
+    let targetAngle = targetAngleForSegmentMiddleToAlignWithPointer - randomOffsetWithinSegment;
 
     const MIN_ADDITIONAL_ROTATIONS = 6;
     let totalTargetRotation = currentRotation + MIN_ADDITIONAL_ROTATIONS * 2 * Math.PI;
-    
     const currentRotRemainder = totalTargetRotation % (2 * Math.PI);
     const normalizedTargetAngle = (targetAngle % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
     const normalizedCurrentRotRemainder = (currentRotRemainder % (2*Math.PI) + 2 * Math.PI) % (2*Math.PI);
-
     totalTargetRotation += (normalizedTargetAngle - normalizedCurrentRotRemainder);
-
      if (totalTargetRotation <= currentRotation + 0.1) { 
         totalTargetRotation += 2 * Math.PI;
     }
@@ -205,13 +365,11 @@ const App: React.FC = () => {
       if (elapsed >= spinDuration) {
         const finalRotation = targetRotationRef.current;
         setCurrentRotation(finalRotation);
-        
         animationFrameIdRef.current = null;
 
         const winnerIdOrName = names[winnerIndexRef.current]; 
         const winnerImageAsset = imageStore[winnerIdOrName];
         const winnerDisplayName = winnerImageAsset?.fileName || winnerIdOrName; 
-        
         const trimmedWinnerDisplayName = winnerDisplayName ? winnerDisplayName.trim() : "";
 
         if (trimmedWinnerDisplayName.length > 0 || winnerImageAsset) { 
@@ -237,7 +395,6 @@ const App: React.FC = () => {
                   timestamp: Date.now()
                 }
               ]);
-              // Cập nhật số lượng quà
               setGiftList(prevGifts => prevGifts.map(gift => 
                 gift.id === currentGiftToAward!.id 
                 ? { ...gift, quantity: gift.quantity - 1 }
@@ -254,9 +411,16 @@ const App: React.FC = () => {
               ]);
             }
             setShowWinnerModal(true);
-            setShowConfetti(true); 
+            setShowConfetti(true);
+            if (winSoundRef.current) {
+              winSoundRef.current.currentTime = 0; // Rewind if playing again quickly
+              winSoundRef.current.play().catch(error => {
+                console.warn("Không thể phát âm thanh chiến thắng:", error);
+                addNotification("Không thể phát âm thanh. Trình duyệt có thể đã chặn tự động phát.", "info", 5000);
+              });
+            }
         } else {
-            console.warn("Spin resulted in an invalid or empty winner name. Modal not shown.");
+            addNotification("Vòng quay dừng lại ở một mục không hợp lệ hoặc trống.", 'error');
             setSelectedName(null);
             setSelectedItem(null);
         }
@@ -280,7 +444,7 @@ const App: React.FC = () => {
     };
 
     animationFrameIdRef.current = requestAnimationFrame(animate);
-  }, [names, isSpinning, currentRotation, spinDuration, parsedPriorityNames, imageStore, autoShuffle, useGiftList, giftList, handleNamesUpdate]);
+  }, [names, isSpinning, currentRotation, spinDuration, parsedPriorityNames, imageStore, autoShuffle, useGiftList, giftList, handleNamesUpdate, boostedParticipants, addNotification]);
 
 
   useEffect(() => {
@@ -354,6 +518,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        if (showClearHistoryConfirmModal) setShowClearHistoryConfirmModal(false);
         if (showWinnerModal) handleCloseWinnerModal();
         if (isImageModalOpen) {
             setIsImageModalOpen(false);
@@ -370,7 +535,7 @@ const App: React.FC = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [showWinnerModal, isImageModalOpen, handleCloseWinnerModal]);
+  }, [showWinnerModal, isImageModalOpen, handleCloseWinnerModal, showClearHistoryConfirmModal]);
 
 
   const handleRemoveWinner = () => {
@@ -392,16 +557,19 @@ const App: React.FC = () => {
     setCurrentGiftForModal(null);
   };
   
-  const handleClearWinnerHistory = () => {
+  const confirmClearWinnerHistory = () => {
     setWinnerHistory([]);
-    setCopyStatusMessage('');
+    addNotification("Đã xóa lịch sử kết quả.", 'info');
+    // setShowClearHistoryConfirmModal(false); // Modal closes itself on confirm
   };
 
   const handleImageSelected = (src: string) => {
     if (imageSelectionPurpose === 'centerLogo') {
       setCenterImageSrc(src);
+      addNotification("Đã cập nhật logo trung tâm.", 'success');
     } else if (imageSelectionPurpose === 'wheelBackground') {
       setWheelBackgroundImageSrc(src);
+      addNotification("Đã cập nhật ảnh nền vòng quay.", 'success');
     }
     setIsImageModalOpen(false);
     setImageSelectionPurpose(null);
@@ -409,12 +577,33 @@ const App: React.FC = () => {
 
   const handleRemoveLogo = () => {
     setCenterImageSrc(null);
+    addNotification("Đã xóa logo trung tâm.", 'info');
   };
 
   const handleRemoveWheelBackground = () => {
     setWheelBackgroundImageSrc(null);
+    addNotification("Đã xóa ảnh nền vòng quay.", 'info');
   };
   
+  const handleWheelDynamicBackgroundChange = (newBackground: WheelDynamicBackground) => {
+    setWheelDynamicBackground(newBackground);
+    if (newBackground) {
+        addNotification("Đã cập nhật màu nền vòng quay.", 'success');
+    } else {
+        addNotification("Đã xóa màu nền tùy chỉnh của vòng quay.", 'info');
+    }
+  };
+  
+  const handleAppGlobalBackgroundChange = (newBackground: AppGlobalBackground) => {
+    setAppGlobalBackground(newBackground);
+     if (newBackground) {
+        addNotification("Đã cập nhật màu nền ứng dụng.", 'success');
+    } else {
+        addNotification("Đã khôi phục màu nền ứng dụng mặc định.", 'info');
+    }
+  };
+
+
   const ConfettiPiece: React.FC<{id: number}> = ({id}) => {
     const style = {
       left: `${Math.random() * 100}%`,
@@ -458,8 +647,7 @@ const App: React.FC = () => {
 
   const handleCopyResults = async () => {
     if (winnerHistory.length === 0) {
-      setCopyStatusMessage("Không có kết quả để sao chép.");
-      setTimeout(() => setCopyStatusMessage(''), 3000);
+      addNotification("Không có kết quả để sao chép.", 'info');
       return;
     }
 
@@ -486,12 +674,11 @@ const App: React.FC = () => {
 
     try {
       await navigator.clipboard.writeText(tsvContent);
-      setCopyStatusMessage("Đã sao chép kết quả vào clipboard!");
+      addNotification("Đã sao chép kết quả vào clipboard!", 'success');
     } catch (err) {
       console.error('Lỗi sao chép vào clipboard:', err);
-      setCopyStatusMessage("Lỗi: Không thể sao chép.");
+      addNotification("Lỗi: Không thể sao chép.", 'error');
     }
-    setTimeout(() => setCopyStatusMessage(''), 3000);
   };
 
   const renderTabContent = () => {
@@ -524,7 +711,6 @@ const App: React.FC = () => {
         }
       });
       
-      // Sắp xếp các mục trong mỗi nhóm theo thời gian (mới nhất trước)
       for (const title in groupedHistory) {
         groupedHistory[title].sort((a, b) => b.timestamp - a.timestamp);
       }
@@ -545,7 +731,7 @@ const App: React.FC = () => {
                 Sao chép Kết quả
               </button>
               <button
-                onClick={handleClearWinnerHistory}
+                onClick={() => setShowClearHistoryConfirmModal(true)} 
                 disabled={winnerHistory.length === 0 || isSpinning}
                 className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 py-1.5 px-3 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 aria-label="Xóa lịch sử kết quả"
@@ -554,12 +740,6 @@ const App: React.FC = () => {
               </button>
             </div>
           </div>
-           {copyStatusMessage && (
-            <p className={`text-sm text-center mb-2 ${copyStatusMessage.includes('Lỗi') ? 'text-red-400' : 'text-green-400'}`}
-               aria-live="assertive">
-              {copyStatusMessage}
-            </p>
-          )}
           {winnerHistory.length > 0 ? (
             <div className="max-h-80 overflow-y-auto space-y-2 pr-1 winner-history-list custom-scrollbar">
               {Object.entries(groupedHistory).map(([giftTitle, items]) => (
@@ -649,7 +829,10 @@ const App: React.FC = () => {
 
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-slate-100 flex flex-col items-center p-4 space-y-6">
+    <div 
+        ref={appContainerRef} 
+        className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-slate-100 flex flex-col items-center p-4 space-y-6"
+    >
       <style>{`
         @keyframes fall {
           0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
@@ -682,17 +865,19 @@ const App: React.FC = () => {
 
       <main className="flex flex-col lg:flex-row items-start justify-around w-full max-w-screen-2xl gap-6 lg:gap-10">
         <div 
-            ref={wheelWrapperRef} // Assign ref here
+            ref={wheelWrapperRef} 
             className="relative flex-shrink-0 w-full lg:w-auto aspect-square mx-auto lg:mx-0" 
             style={{maxWidth: `${wheelAreaDimension}px`, maxHeight: `${wheelAreaDimension}px` }}
         >
           <WheelCanvas
             names={names}
             imageStore={imageStore}
+            boostedParticipants={boostedParticipants}
             rotationAngle={currentRotation}
-            canvasSize={wheelAreaDimension * 0.9} // Canvas is 90% of the container
+            canvasSize={wheelAreaDimension * 0.9} 
             centerImageSrc={centerImageSrc}
-            wheelBackgroundImageSrc={wheelBackgroundImageSrc} 
+            wheelBackgroundImageSrc={wheelBackgroundImageSrc}
+            dynamicBackgroundColor={wheelDynamicBackground} 
             onWheelClick={spinWheel}
           />
         </div>
@@ -803,7 +988,6 @@ const App: React.FC = () => {
                 />
                 <span>Tự động trộn danh sách sau mỗi lần quay</span>
               </label>
-              {/* Checkbox for Gift List */}
               <label htmlFor="useGiftListCheckbox" className="flex items-center justify-center space-x-2 text-slate-300 cursor-pointer p-2 rounded-md hover:bg-slate-700 transition-colors">
                 <input
                   type="checkbox"
@@ -823,6 +1007,16 @@ const App: React.FC = () => {
                 />
               )}
             </div>
+          ))}
+
+          {renderCollapsibleSection("Tăng tỉ lệ thắng", isBoostWinRateOpen, setIsBoostWinRateOpen, "boostWinRateContent", (
+            <BoostWinRateInput
+              boostedParticipants={boostedParticipants}
+              setBoostedParticipants={setBoostedParticipants}
+              isSpinning={isSpinning}
+              namesOnWheel={names}
+              imageStore={imageStore}
+            />
           ))}
           
           {renderCollapsibleSection("Tùy Chỉnh Vòng Quay", isWheelCustomizationOpen, setIsWheelCustomizationOpen, "wheelCustomizationContent", (
@@ -863,8 +1057,24 @@ const App: React.FC = () => {
                   Xóa Ảnh Nền Vòng Quay
                 </button>
               )}
+               <div className="pt-3 border-t border-slate-700/50">
+                 <WheelBackgroundColorPicker
+                    currentBackground={wheelDynamicBackground}
+                    onBackgroundChange={handleWheelDynamicBackgroundChange}
+                    isSpinning={isSpinning}
+                  />
+               </div>
             </div>
           ))}
+
+           {renderCollapsibleSection("🎨 Tùy Chỉnh Giao Diện Chung", isAppAppearanceOpen, setIsAppAppearanceOpen, "appAppearanceContent", (
+                <AppBackgroundColorPicker
+                    currentBackground={appGlobalBackground}
+                    onBackgroundChange={handleAppGlobalBackgroundChange}
+                    isSpinning={isSpinning}
+                />
+            ))}
+
 
         </div>
       </main>
@@ -890,6 +1100,16 @@ const App: React.FC = () => {
         }}
         onImageSelected={handleImageSelected}
         purposeTitle={imageSelectionPurpose === 'centerLogo' ? 'Chọn Logo Trung Tâm' : imageSelectionPurpose === 'wheelBackground' ? 'Chọn Ảnh Nền Vòng Quay' : 'Chọn Hình Ảnh'}
+      />
+
+      <ConfirmationModal
+        isOpen={showClearHistoryConfirmModal}
+        onClose={() => setShowClearHistoryConfirmModal(false)}
+        onConfirm={confirmClearWinnerHistory}
+        title="Xác nhận xóa lịch sử"
+        message="Bạn có chắc chắn muốn xóa toàn bộ lịch sử kết quả quay không? Hành động này không thể hoàn tác."
+        confirmButtonText="Xóa Tất Cả"
+        confirmButtonVariant="danger"
       />
 
       {showConfetti && (

@@ -2,6 +2,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { NotificationProvider } from './components/NotificationContext';
+import NotificationContainer from './components/NotificationContainer';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -11,6 +13,9 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <App />
+    <NotificationProvider>
+      <App />
+      <NotificationContainer />
+    </NotificationProvider>
   </React.StrictMode>
 );

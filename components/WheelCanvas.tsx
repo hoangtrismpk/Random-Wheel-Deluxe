@@ -1,15 +1,18 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import type { ImageStore } from '../App'; // Import ImageStore type
+import type { BoostedParticipant, WheelDynamicBackground, LinearGradientBackgroundConfig } from '../types'; // Import types
 
 interface WheelCanvasProps {
   names: string[]; // Now contains text names or image IDs
   imageStore: ImageStore; // To look up image data using IDs
+  boostedParticipants: BoostedParticipant[]; // For dynamic segment sizes
   rotationAngle: number; // in radians
   canvasSize?: number;
   onSpinComplete?: () => void; // Optional callback
   centerImageSrc?: string | null;
   wheelBackgroundImageSrc?: string | null; // New prop for wheel background
+  dynamicBackgroundColor?: WheelDynamicBackground; // New prop for dynamic background color/gradient
   onWheelClick?: () => void; // New prop for clicking the wheel
 }
 
@@ -22,7 +25,6 @@ const SEGMENT_COLORS = [
 const TEXT_COLOR = "#1F2937"; 
 const BORDER_COLOR = "#FFFFFF"; 
 const POINTER_COLOR = "#F87171"; 
-// LOGO_DIAMETER and LOGO_RADIUS are now dynamic
 
 const MIN_FONT_SIZE = 6;
 
@@ -33,21 +35,38 @@ const IDLE_ROTATION_SPEED = 0.003; // Radians per frame
 const drawSegmentTextInternal = (
   ctx: CanvasRenderingContext2D,
   text: string,
-  segmentAngle: number, // This is the middle angle of the segment
+  segmentMiddleAngle: number, // This is the middle angle of the segment
+  segmentAngleSpan: number, // The angular width of this specific segment
   radius: number,
   baseCanvasSize: number,
   isPlaceholder: boolean = false
 ) => {
   ctx.save();
-  ctx.rotate(segmentAngle); 
+  ctx.rotate(segmentMiddleAngle); 
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
-  ctx.fillStyle = isPlaceholder ? "#A0A0A0" : TEXT_COLOR; // Lighter color for placeholders
+  ctx.fillStyle = isPlaceholder ? "#A0A0A0" : TEXT_COLOR;
   
-  const maxTextWidth = radius * 0.55; 
-  let fontSize = Math.min(18, radius / 10, baseCanvasSize / 30);
-  if (isPlaceholder) fontSize = Math.max(MIN_FONT_SIZE, fontSize * 0.8);
+  // Adjust maxTextWidth based on segmentAngleSpan - narrower segments get less space
+  // A very small segment might only allow a few characters.
+  // The factor 0.55 of radius was for average segments. For very thin ones, this might be too large.
+  // Max text width should also be proportional to how "wide" the segment is at the text position.
+  const textArcLength = (radius * 0.7) * segmentAngleSpan; // Arc length where text is roughly placed
+  let maxTextWidth = Math.min(radius * 0.55, textArcLength * 0.8);
 
+
+  let fontSize = Math.min(18, radius / 10, baseCanvasSize / 30);
+   // Further reduce font size for very narrow segments
+  if (segmentAngleSpan < (Math.PI / 12)) { // Less than 15 degrees
+    fontSize *= 0.8;
+  }
+  if (segmentAngleSpan < (Math.PI / 24)) { // Less than 7.5 degrees
+    fontSize *= 0.7;
+  }
+  fontSize = Math.max(MIN_FONT_SIZE, fontSize);
+
+
+  if (isPlaceholder) fontSize = Math.max(MIN_FONT_SIZE, fontSize * 0.8);
 
   ctx.font = `${isPlaceholder ? 'italic' : 'bold'} ${fontSize}px Arial, sans-serif`;
 
@@ -58,6 +77,7 @@ const drawSegmentTextInternal = (
 
   let displayText = text;
   if (ctx.measureText(displayText).width > maxTextWidth && fontSize <= MIN_FONT_SIZE) {
+       // Truncation logic (same as before, but now maxTextWidth can be smaller)
        let tempText = displayText;
        while(ctx.measureText(tempText + "...").width > maxTextWidth && tempText.length > 1) {
           tempText = tempText.substring(0, tempText.length - 1);
@@ -78,7 +98,7 @@ const drawSegmentTextInternal = (
        }
   }
   
-  if (displayText && displayText.length > 0 && fontSize >= MIN_FONT_SIZE * 0.8) {
+  if (displayText && displayText.length > 0 && fontSize >= MIN_FONT_SIZE * 0.8 && segmentAngleSpan > Math.PI / 180) { // Only draw if segment has some visible angle
       ctx.fillText(displayText, radius * 0.85, 0); 
   }
   ctx.restore();
@@ -89,8 +109,8 @@ const drawSegmentImageInternal = (
   image: HTMLImageElement,
   segmentMiddleRotation: number, // Middle rotation angle of the segment
   radius: number,
-  _baseCanvasSize: number, // Unused for now, but kept for signature consistency
-  anglePerSegment: number // The angle span of one segment
+  _baseCanvasSize: number, 
+  segmentAngleSpan: number // The angle span of one segment
 ) => {
   ctx.save();
   ctx.rotate(segmentMiddleRotation);
@@ -98,18 +118,25 @@ const drawSegmentImageInternal = (
   const imgW = image.width;
   const imgH = image.height;
 
-  if (imgW <= 0 || imgH <= 0) { // Don't draw if image has no dimensions
+  if (imgW <= 0 || imgH <= 0) {
     ctx.restore();
     return;
   }
 
   const radialPositionForImageCenter = radius * 0.70; 
-  const maxRadialSpaceForImage = radius * 0.25; 
-  const tangentialSpaceAtRadialPosition = radialPositionForImageCenter * anglePerSegment;
-  const maxTangentialSpaceForImage = tangentialSpaceAtRadialPosition * 0.8; 
+  const maxRadialSpaceForImage = radius * 0.25; // How "tall" the image can be along the radius
+  
+  // Tangential space (width) is dependent on the segment's angle span
+  const tangentialSpaceAtRadialPosition = radialPositionForImageCenter * segmentAngleSpan;
+  const maxTangentialSpaceForImage = tangentialSpaceAtRadialPosition * 0.7; // Use 70% of the arc length at that radius
 
   const boxW = maxTangentialSpaceForImage;
   const boxH = maxRadialSpaceForImage;
+
+  if (boxW < 1 || boxH < 1) { // If the segment is too small to draw anything meaningful
+    ctx.restore();
+    return;
+  }
 
   let dWidth = imgW;
   let dHeight = imgH;
@@ -140,7 +167,7 @@ const drawSegmentImageInternal = (
 
 
 const WheelCanvas: React.FC<WheelCanvasProps> = ({ 
-  names, imageStore, rotationAngle, canvasSize = 500, centerImageSrc, wheelBackgroundImageSrc, onWheelClick
+  names, imageStore, boostedParticipants, rotationAngle, canvasSize = 500, centerImageSrc, wheelBackgroundImageSrc, dynamicBackgroundColor, onWheelClick
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -149,19 +176,18 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
   const [loadedWheelBackgroundImage, setLoadedWheelBackgroundImage] = useState<HTMLImageElement | null>(null);
   const [loadedSegmentImages, setLoadedSegmentImages] = useState<Record<string, HTMLImageElement | 'error' | 'loading'>>({});
 
-  // State for idle animation
   const [isIdleAnimating, setIsIdleAnimating] = useState<boolean>(false);
   const [idleAnimationRotation, setIdleAnimationRotation] = useState<number>(0);
   const idleAnimationFrameIdRef = useRef<number | null>(null);
 
 
   useEffect(() => {
-    if (names.length === 0) {
+    if (names.length === 0 && !dynamicBackgroundColor && !wheelBackgroundImageSrc) {
       setIsIdleAnimating(true);
     } else {
       setIsIdleAnimating(false);
     }
-  }, [names]);
+  }, [names, dynamicBackgroundColor, wheelBackgroundImageSrc]);
 
 
   useEffect(() => {
@@ -169,8 +195,6 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
       let lastTimestamp = 0;
       const animateIdle = (timestamp: number) => {
         if (lastTimestamp === 0) lastTimestamp = timestamp;
-        // const deltaTime = timestamp - lastTimestamp; // Can be used for frame-rate independent speed if needed
-
         setIdleAnimationRotation(prevRotation => (prevRotation + IDLE_ROTATION_SPEED) % (2 * Math.PI));
         lastTimestamp = timestamp;
         idleAnimationFrameIdRef.current = requestAnimationFrame(animateIdle);
@@ -181,7 +205,7 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
         cancelAnimationFrame(idleAnimationFrameIdRef.current);
         idleAnimationFrameIdRef.current = null;
       }
-      setIdleAnimationRotation(0); // Reset rotation when not idle
+      setIdleAnimationRotation(0); 
     }
     return () => {
       if (idleAnimationFrameIdRef.current) {
@@ -276,15 +300,46 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
 
     const centerX = canvasSize / 2;
     const centerY = canvasSize / 2;
-    const radius = canvasSize / 2 * 0.9; // Radius of the segmented wheel part
+    const radius = canvasSize / 2 * 0.9; 
 
     ctx.clearRect(0, 0, canvasSize, canvasSize);
     
     ctx.save(); 
-    ctx.translate(centerX, centerY); 
+    ctx.translate(centerX, centerY);
+
+    // 1. Draw Dynamic Background (Solid or Gradient)
+    if (dynamicBackgroundColor) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+      ctx.clip();
+
+      if (typeof dynamicBackgroundColor === 'string') { // Solid color
+        ctx.fillStyle = dynamicBackgroundColor;
+        ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+      } else if (dynamicBackgroundColor.type === 'linear-gradient') {
+        const gradConfig = dynamicBackgroundColor as LinearGradientBackgroundConfig;
+        // Convert CSS-like angle (0deg=top, 90deg=right) to canvas angle (0=right, PI/2=down)
+        const angleRad = (gradConfig.angle - 90) * Math.PI / 180; 
+        
+        const x0 = -radius * Math.cos(angleRad);
+        const y0 = -radius * Math.sin(angleRad);
+        const x1 = radius * Math.cos(angleRad);
+        const y1 = radius * Math.sin(angleRad);
+
+        const gradient = ctx.createLinearGradient(x0, y0, x1, y1);
+        const sortedStops = [...gradConfig.stops].sort((a, b) => a.position - b.position);
+        sortedStops.forEach(stop => {
+          gradient.addColorStop(Math.max(0, Math.min(1, stop.position / 100)), stop.color);
+        });
+        ctx.fillStyle = gradient;
+        ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+      }
+      ctx.restore(); // Restore from clipping
+    }
+
 
     if (isIdleAnimating) {
-      // Draw idle wheel (5 colored segments)
       const anglePerIdleSegment = (2 * Math.PI) / IDLE_SEGMENT_COUNT;
       for (let i = 0; i < IDLE_SEGMENT_COUNT; i++) {
         const segmentColor = SEGMENT_COLORS[i % SEGMENT_COLORS.length];
@@ -306,48 +361,118 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
         ctx.lineWidth = 2.5; 
         ctx.stroke();
       }
-    } else if (names.length === 0 && !loadedWheelBackgroundImage) { 
+    } else if (names.length === 0 && !loadedWheelBackgroundImage && !dynamicBackgroundColor) { 
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillStyle = "#A0A0A0";
       ctx.font = `bold ${Math.min(20, canvasSize / 25)}px Arial`;
       ctx.fillText("Thêm mục để quay!", 0, 0); 
-    } else if (names.length > 0 || loadedWheelBackgroundImage) {
+    } else if (names.length > 0 || loadedWheelBackgroundImage || dynamicBackgroundColor) { // Modified condition
+      // 2. Draw Wheel Background Image (if exists)
       if (loadedWheelBackgroundImage) {
         ctx.save();
         ctx.beginPath();
         ctx.arc(0, 0, radius, 0, 2 * Math.PI);
         ctx.clip();
-
         const img = loadedWheelBackgroundImage;
         const imgRatio = img.width / img.height;
         const wheelDiameter = radius * 2;
-        
         let dWidth, dHeight;
-        if (img.width / wheelDiameter < img.height / wheelDiameter ) {
+        if (img.width / wheelDiameter < img.height / wheelDiameter ) { // Fit width
             dWidth = wheelDiameter;
             dHeight = dWidth / imgRatio;
-        } else { 
+        } else { // Fit height
             dHeight = wheelDiameter;
             dWidth = dHeight * imgRatio;
         }
-        const dx = -dWidth / 2;
-        const dy = -dHeight / 2;
-        ctx.drawImage(img, dx, dy, dWidth, dHeight);
+        // Center the image if it's larger than the wheel diameter after fitting
+        const dx = (wheelDiameter - dWidth) / 2 - radius; // adjust for translation
+        const dy = (wheelDiameter - dHeight) / 2 - radius; // adjust for translation
+        ctx.drawImage(img, -radius + (wheelDiameter - dWidth)/2, -radius + (wheelDiameter - dHeight)/2, dWidth, dHeight);
         ctx.restore(); 
       }
 
+      // 3. Draw Segments
       if (names.length > 0) {
-        const numSegments = names.length;
-        const anglePerSegment = (2 * Math.PI) / numSegments;
+        let effectiveParticipants: Array<{
+          nameOrId: string;
+          displayName: string;
+          probability: number;
+        }> = [];
 
-        for (let i = 0; i < numSegments; i++) {
-          const nameOrId = names[i];
-          const segmentColor = SEGMENT_COLORS[i % SEGMENT_COLORS.length];
-          const startAngle = i * anglePerSegment;
-          const endAngle = (i + 1) * anglePerSegment;
+        const wheelItemsWithDetails = names.map(nameOrId => ({
+          originalIdOrName: nameOrId,
+          displayName: (imageStore[nameOrId]?.fileName || nameOrId).trim().toLowerCase(),
+        }));
 
-          if (!loadedWheelBackgroundImage) { // Only draw segment color if no wheel background
+        const validBoostedOnWheel = boostedParticipants
+          .map(bp => {
+            const wheelItem = wheelItemsWithDetails.find(item => item.displayName === bp.name.trim().toLowerCase());
+            return wheelItem ? { ...bp, originalIdOrName: wheelItem.originalIdOrName } : null;
+          })
+          .filter(bpOrNull => bpOrNull !== null && bpOrNull.percentage > 0 && bpOrNull.percentage < 100) as Array<BoostedParticipant & { originalIdOrName: string }>;
+        
+        const totalBoostedPercentageValue = validBoostedOnWheel.reduce((sum, bp) => sum + bp.percentage, 0);
+        const isBoostConfigValidAndApplicable = totalBoostedPercentageValue > 0 && totalBoostedPercentageValue < 100 && validBoostedOnWheel.length > 0;
+
+        if (isBoostConfigValidAndApplicable) {
+          const remainingPercentageForNonBoosted = 100 - totalBoostedPercentageValue;
+          const nonBoostedOnWheel = wheelItemsWithDetails.filter(
+            item => !validBoostedOnWheel.some(bp => bp.originalIdOrName === item.originalIdOrName)
+          );
+          const numNonBoosted = nonBoostedOnWheel.length;
+          const percentagePerNonBoosted = numNonBoosted > 0 ? remainingPercentageForNonBoosted / numNonBoosted : 0;
+
+          names.forEach(nameOrId => {
+            const boostedEntry = validBoostedOnWheel.find(bp => bp.originalIdOrName === nameOrId);
+            if (boostedEntry) {
+              effectiveParticipants.push({
+                nameOrId,
+                displayName: boostedEntry.name, 
+                probability: boostedEntry.percentage / 100,
+              });
+            } else if (nonBoostedOnWheel.some(nb => nb.originalIdOrName === nameOrId) && percentagePerNonBoosted > 0) {
+              effectiveParticipants.push({
+                nameOrId,
+                displayName: (imageStore[nameOrId]?.fileName || nameOrId).trim().toLowerCase(),
+                probability: percentagePerNonBoosted / 100,
+              });
+            }
+          });
+        } else { 
+          const numSegments = names.length;
+          const probPerSegment = numSegments > 0 ? 1 / numSegments : 0;
+          names.forEach(nameOrId => {
+            effectiveParticipants.push({
+              nameOrId,
+              displayName: (imageStore[nameOrId]?.fileName || nameOrId).trim().toLowerCase(),
+              probability: probPerSegment,
+            });
+          });
+        }
+        
+        effectiveParticipants = effectiveParticipants.filter(p => p.probability * 2 * Math.PI >= 0.0001); 
+
+        const currentTotalProbability = effectiveParticipants.reduce((sum, p) => sum + p.probability, 0);
+        if (effectiveParticipants.length > 0 && currentTotalProbability > 0 && Math.abs(currentTotalProbability - 1.0) > 1e-9) {
+          effectiveParticipants = effectiveParticipants.map(p => ({
+            ...p,
+            probability: p.probability / currentTotalProbability,
+          }));
+        }
+        
+        let currentAngle = 0;
+        effectiveParticipants.forEach((participant, i) => {
+          const nameOrId = participant.nameOrId;
+          const segmentColor = SEGMENT_COLORS[i % SEGMENT_COLORS.length]; 
+          
+          const segmentAngleSpan = participant.probability * 2 * Math.PI;
+          if (segmentAngleSpan <= 0) return;
+
+          const startAngle = currentAngle;
+          const endAngle = currentAngle + segmentAngleSpan;
+
+          if (!loadedWheelBackgroundImage && !dynamicBackgroundColor) { // Only draw segment color if no wheel bg image AND no dynamic bg
             ctx.beginPath();
             ctx.moveTo(0, 0);
             ctx.arc(0, 0, radius, startAngle, endAngle);
@@ -359,53 +484,49 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
           ctx.beginPath();
           ctx.moveTo(0, 0);
           ctx.arc(0, 0, radius, startAngle, endAngle);
-          if (loadedWheelBackgroundImage) ctx.lineTo(0,0); 
+          if (loadedWheelBackgroundImage || dynamicBackgroundColor) ctx.lineTo(0,0); 
           ctx.closePath();
           ctx.strokeStyle = BORDER_COLOR;
-          ctx.lineWidth = numSegments > 50 ? 0.5 : (numSegments > 20 ? 1.5 : 2.5);
+          ctx.lineWidth = names.length > 50 ? 0.5 : (names.length > 20 ? 1.5 : 2.5);
           ctx.stroke();
 
-          const itemAngle = startAngle + anglePerSegment / 2;
+          const itemDisplayAngle = startAngle + segmentAngleSpan / 2;
           const imageAsset = imageStore[nameOrId];
           if (imageAsset) { 
             const loadedImage = loadedSegmentImages[nameOrId];
             if (loadedImage instanceof HTMLImageElement) {
-              drawSegmentImageInternal(ctx, loadedImage, itemAngle, radius, canvasSize, anglePerSegment);
+              drawSegmentImageInternal(ctx, loadedImage, itemDisplayAngle, radius, canvasSize, segmentAngleSpan);
             } else if (loadedImage === 'loading') {
-              drawSegmentTextInternal(ctx, "Đang tải ảnh...", itemAngle, radius, canvasSize, true);
+              drawSegmentTextInternal(ctx, "Đang tải ảnh...", itemDisplayAngle, segmentAngleSpan, radius, canvasSize, true);
             } else { 
-              drawSegmentTextInternal(ctx, `Lỗi: ${imageAsset.fileName.substring(0,10)}...`, itemAngle, radius, canvasSize, true);
+              drawSegmentTextInternal(ctx, `Lỗi: ${imageAsset.fileName.substring(0,10)}...`, itemDisplayAngle, segmentAngleSpan, radius, canvasSize, true);
             }
           } else { 
-            drawSegmentTextInternal(ctx, nameOrId, itemAngle, radius, canvasSize);
+            drawSegmentTextInternal(ctx, nameOrId, itemDisplayAngle, segmentAngleSpan, radius, canvasSize);
           }
-        }
+          currentAngle = endAngle;
+        });
       }
     }
 
-    // --- Dynamic Logo Size Calculation ---
-    // canvasSize is the full dimension of the canvas element.
-    // The visual "wheel" (segmented part) has a diameter of `radius * 2`, which is `canvasSize * 0.9`.
-    const wheelVisualDiameter = canvasSize * 0.9;
-    const LOGO_DIAMETER = wheelVisualDiameter * 0.25; // Logo is 25% of the visual wheel diameter
+    // 4. Draw Center Logo/Default
+    const wheelVisualDiameter = canvasSize * 0.9; // This is the actual wheel diameter (radius * 2)
+    const LOGO_DIAMETER = wheelVisualDiameter * 0.25; 
     const LOGO_RADIUS = LOGO_DIAMETER / 2;
-    // --- End Dynamic Logo Size Calculation ---
 
-    // Draw Center Logo (always on top of wheel segments or idle animation)
     if (loadedCenterImage) {
         ctx.save(); 
         ctx.beginPath();
         ctx.arc(0, 0, LOGO_RADIUS, 0, 2 * Math.PI); 
         ctx.closePath();
         ctx.clip();
-
         const imgWidth = loadedCenterImage.width;
         const imgHeight = loadedCenterImage.height;
         let dWidth, dHeight, dx, dy;
-        if (imgWidth / imgHeight > 1) { 
+        if (imgWidth / imgHeight > 1) { // Landscape or square
             dHeight = LOGO_DIAMETER;
             dWidth = imgWidth * (LOGO_DIAMETER / imgHeight);
-        } else { 
+        } else { // Portrait
             dWidth = LOGO_DIAMETER;
             dHeight = imgHeight * (LOGO_DIAMETER / imgWidth);
         }
@@ -413,16 +534,15 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
         dy = -dHeight / 2; 
         ctx.drawImage(loadedCenterImage, dx, dy, dWidth, dHeight);
         ctx.restore(); 
-
         ctx.beginPath();
         ctx.arc(0, 0, LOGO_RADIUS, 0, 2 * Math.PI);
         ctx.strokeStyle = BORDER_COLOR;
-        ctx.lineWidth = Math.max(1, LOGO_DIAMETER * 0.03); // Border relative to logo size
+        ctx.lineWidth = Math.max(1, LOGO_DIAMETER * 0.03); 
         ctx.stroke();
     } else {
         const outerDefaultRadius = LOGO_RADIUS * 0.9;
         const innerDefaultRadius = LOGO_RADIUS * 0.6;
-        if (LOGO_DIAMETER > 0) { // Only draw if logo has a size
+        if (LOGO_DIAMETER > 0) { 
             ctx.beginPath();
             ctx.arc(0, 0, outerDefaultRadius, 0, 2 * Math.PI); 
             ctx.fillStyle = BORDER_COLOR;
@@ -437,7 +557,7 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
     ctx.restore(); 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); 
 
-  }, [names, canvasSize, loadedCenterImage, imageStore, loadedSegmentImages, loadedWheelBackgroundImage, wheelBackgroundImageSrc, isIdleAnimating]);
+  }, [names, canvasSize, loadedCenterImage, imageStore, loadedSegmentImages, loadedWheelBackgroundImage, wheelBackgroundImageSrc, isIdleAnimating, boostedParticipants, dynamicBackgroundColor]);
 
 
   useEffect(() => {
@@ -460,7 +580,6 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
 
     ctx.clearRect(0, 0, canvasSize, canvasSize);
     
-    // Determine rotation for the main canvas
     const currentDisplayRotation = isIdleAnimating ? idleAnimationRotation : rotationAngle;
 
     ctx.save();
@@ -469,10 +588,9 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
     ctx.drawImage(offscreenCanvasRef.current, -centerX, -centerY, canvasSize, canvasSize);
     ctx.restore(); 
     
-    // Draw pointer (always, for now)
-    const pointerBaseWidth = Math.max(15, canvasSize * 0.03); // Pointer size relative to canvas
+    const pointerBaseWidth = Math.max(15, canvasSize * 0.03); 
     const pointerHeight = Math.max(25, canvasSize * 0.05);
-    const pointerTipY = pointerHeight * 0.3; // Y-offset for the base of the triangle
+    const pointerTipY = pointerHeight * 0.3; 
     
     ctx.fillStyle = POINTER_COLOR;
     ctx.beginPath();
@@ -487,9 +605,9 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
     
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  }, [names, rotationAngle, canvasSize, loadedCenterImage, imageStore, loadedSegmentImages, loadedWheelBackgroundImage, wheelBackgroundImageSrc, isIdleAnimating, idleAnimationRotation]); 
+  }, [rotationAngle, canvasSize, isIdleAnimating, idleAnimationRotation, names, imageStore, boostedParticipants, dynamicBackgroundColor]); // Added dynamicBackgroundColor
 
-  const canSpin = names.length > 0 && !isIdleAnimating; // Idle animation implies names.length is 0
+  const canSpin = names.length > 0 && !isIdleAnimating; 
 
   return (
     <canvas 
@@ -497,8 +615,8 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
       onClick={canSpin ? onWheelClick : undefined} 
       className={`max-w-full max-h-full aspect-square ${canSpin ? 'cursor-pointer' : 'cursor-default'}`}
       aria-label="Vòng quay may mắn"
-      role="button" // Semantically, it can act as a button
-      tabIndex={canSpin ? 0 : -1} // Make it focusable if it's clickable
+      role="button" 
+      tabIndex={canSpin ? 0 : -1} 
       onKeyDown={canSpin && onWheelClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onWheelClick(); } : undefined}
     ></canvas>
   );

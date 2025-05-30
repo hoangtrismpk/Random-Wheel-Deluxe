@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { ImageStore, ImageAsset } from '../App'; // Import ImageStore type
+import { useNotification } from './NotificationContext'; // Import useNotification
 
 interface NameInputProps {
   currentNames: string[];
@@ -90,34 +91,26 @@ const NameInput: React.FC<NameInputProps> = ({
   const editableDivRef = useRef<HTMLDivElement>(null);
   const isProgrammaticUpdateRef = useRef(false);
   const lastUserEditTimeRef = useRef(0);
+  const { addNotification } = useNotification();
 
 
   useEffect(() => {
     if (!editableDivRef.current || isSpinning) return;
 
-    // Capture if the trigger for this effect was an explicit programmatic action
-    // (like sort/shuffle/add image) that set this ref to true *before* onNamesChange.
     const wasTriggeredProgrammatically = isProgrammaticUpdateRef.current;
 
-    // If this update is NOT due to an explicit programmatic action 
-    // (i.e., likely user typing that called onNamesChange via handleInput)
-    // AND the DOM's current semantic content already matches the new currentNames,
-    // then don't rewrite innerHTML to preserve cursor position.
     if (!wasTriggeredProgrammatically) {
       const domDerivedNames = deriveNamesFromDOM(editableDivRef.current, imageStore);
       const filteredDomDerivedNames = domDerivedNames.filter(nameOrId => {
-        if (imageStore[nameOrId]) return true; // Image IDs are always valid
-        return nameOrId.trim() !== ''; // Text items must not be empty after trim
+        if (imageStore[nameOrId]) return true; 
+        return nameOrId.trim() !== ''; 
       });
 
       if (JSON.stringify(filteredDomDerivedNames) === JSON.stringify(currentNames)) {
-        return; // DOM is semantically in sync, avoid rewrite and cursor jump
+        return; 
       }
     }
 
-    // Signal that this effect is now performing a programmatic update to the DOM.
-    // This flag is used by handleInput to ignore its own parsing during this rewrite.
-    // And also by the cursor restoration logic.
     isProgrammaticUpdateRef.current = true;
 
     let newHtml = '';
@@ -139,7 +132,6 @@ const NameInput: React.FC<NameInputProps> = ({
     if (editableDivRef.current.innerHTML !== newHtml) {
         editableDivRef.current.innerHTML = newHtml;
         
-        // Restore cursor to the end, primarily for explicit programmatic updates
         if (wasTriggeredProgrammatically && window.getSelection) {
             const selection = window.getSelection();
             if (selection) {
@@ -166,9 +158,6 @@ const NameInput: React.FC<NameInputProps> = ({
             }
         }
     }
-
-    // Reset the flag after the DOM update (and potential cursor restoration) is complete.
-    // This ensures subsequent user inputs are not treated as programmatic.
     requestAnimationFrame(() => {
       isProgrammaticUpdateRef.current = false;
     });
@@ -236,9 +225,8 @@ const NameInput: React.FC<NameInputProps> = ({
         }
     }
 
-
     if (!document.execCommand('insertHTML', false, htmlToInsert)) {
-        console.warn('execCommand insertHTML failed. Pasting might not work as expected. Trying to fallback to direct DOM manipulation for paste (less reliable for complex cases).');
+        addNotification('Lỗi khi dán nội dung. Vui lòng thử lại hoặc nhập thủ công.', 'error');
         const sel = window.getSelection();
         if (!sel || !sel.rangeCount || !editableDivRef.current) return;
         let range = sel.getRangeAt(0);
@@ -265,7 +253,6 @@ const NameInput: React.FC<NameInputProps> = ({
     }
     
     lastUserEditTimeRef.current = Date.now();
-    // After paste, the DOM is definitely changed by user action, ensure it's not seen as programmatic
     isProgrammaticUpdateRef.current = false; 
     triggerNamesUpdateFromDOM();
   };
@@ -280,12 +267,12 @@ const NameInput: React.FC<NameInputProps> = ({
     const file = event.target.files?.[0];
     if (file) {
       if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type)) {
-        alert('Loại tệp không hợp lệ. Vui lòng chọn ảnh PNG, JPG, WEBP, hoặc GIF.');
+        addNotification('Loại tệp không hợp lệ. Vui lòng chọn ảnh PNG, JPG, WEBP, hoặc GIF.', 'error');
         if(fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
       if (file.size > 2 * 1024 * 1024) {
-        alert('Tệp quá lớn. Kích thước tối đa cho ảnh trên vòng quay là 2MB.');
+        addNotification('Tệp quá lớn. Kích thước tối đa cho ảnh trên vòng quay là 2MB.', 'error');
         if(fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
@@ -293,12 +280,13 @@ const NameInput: React.FC<NameInputProps> = ({
       reader.onloadend = () => {
         const dataURL = reader.result as string;
         const id = `img_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-        isProgrammaticUpdateRef.current = true; // Signal programmatic update
+        isProgrammaticUpdateRef.current = true; 
         addNewImageToWheel(id, dataURL, file.name);
+        addNotification(`Đã thêm ảnh: ${file.name}`, 'success');
         if(fileInputRef.current) fileInputRef.current.value = "";
       };
       reader.onerror = () => {
-        alert('Lỗi đọc tệp.');
+        addNotification('Lỗi đọc tệp.', 'error');
         if(fileInputRef.current) fileInputRef.current.value = "";
       }
       reader.readAsDataURL(file);
@@ -309,9 +297,10 @@ const NameInput: React.FC<NameInputProps> = ({
   const handleShuffleNames = () => {
     if (isSpinning || currentNames.length === 0) return;
     const shuffledNames = shuffleArray(currentNames);
-    isProgrammaticUpdateRef.current = true; // Signal programmatic update
+    isProgrammaticUpdateRef.current = true; 
     onNamesChange(shuffledNames);
     setSortDirection('none');
+    addNotification('Đã trộn danh sách!', 'info');
   };
 
   const handleSortNames = () => {
@@ -337,9 +326,10 @@ const NameInput: React.FC<NameInputProps> = ({
     }
 
     newSortedOriginals = sortableItems.map(item => item.original);
-    isProgrammaticUpdateRef.current = true; // Signal programmatic update
+    isProgrammaticUpdateRef.current = true; 
     onNamesChange(newSortedOriginals);
     setSortDirection(nextSortDirection);
+    addNotification(`Đã sắp xếp ${nextSortDirection === 'asc' ? 'A-Z' : 'Z-A'}.`, 'info');
   };
 
   return (
