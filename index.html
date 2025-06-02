@@ -1,0 +1,138 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vòng Quay May Mắn | Công cụ chọn tên ngẫu nhiên</title>
+  <link rel="icon" type="image/png" href="https://irace.vn/wp-content/uploads/2025/05/wheel-of-fortune-1.png" />
+  <meta name="description" content="Vòng quay may mắn giúp chọn tên ngẫu nhiên một cách công bằng. Công cụ được xây dựng để sử dụng hoàn toàn miễn phí với nhiều chức năng hấp dẫn">
+  <meta property="og:image" content="https://irace.vn/wp-content/uploads/2025/05/vong-quay-may-man.jpg" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif; overflow-x: hidden; }
+    #root canvas { display: block; } /* Ensure canvas behaves well */
+
+    /* Styles for ContentEditable NameInput */
+    .name-input-editable-area {
+      width: 100%;
+      height: 160px; /* Fixed height, scrollable if content exceeds */
+      padding: 0.75rem; /* p-3 from tailwind */
+      border: 1px solid #374151; /* slate-700 */
+      border-radius: 0.5rem; /* rounded-lg */
+      background-color: #1f2937; /* bg-slate-900 */
+      color: #d1d5db; /* text-slate-200 */
+      overflow-y: auto;
+      line-height: 1.6; /* For better readability if lines wrap */
+      cursor: text;
+    }
+    .name-input-editable-area:focus,
+    .name-input-editable-area:focus-visible {
+      outline: none;
+      border-color: #ec4899; /* pink-500 */
+      box-shadow: 0 0 0 2px #ec4899; /* ring-2 ring-pink-500 */
+    }
+    .name-input-editable-area[contenteditable="false"] {
+      opacity: 0.6;
+      cursor: not-allowed;
+      background-color: #334155; /* A bit darker to indicate disabled */
+    }
+    .name-input-editable-area:empty:before {
+      content: attr(data-placeholder);
+      color: #6b7280; /* text-slate-500 (Tailwind) */
+      pointer-events: none;
+      display: block; /* Ensures it takes up space */
+    }
+
+    /* Styling for items within the contentEditable div */
+    .name-input-editable-area div[data-type="image"] {
+      margin: 3px 0; /* Spacing between items */
+      padding: 1px 0;
+    }
+    .name-input-editable-area div[data-type="image"] > span[contenteditable="false"] {
+      display: inline-flex; 
+      align-items: center; 
+      /* gap: 6px; Removed as filename text is gone */
+      background-color: #334155; /* slate-700 */
+      padding: 3px 6px; /* Adjusted padding slightly if needed */
+      border-radius: 12px; /* Pill shape */
+      vertical-align: middle; /* Aligns better with text if mixed */
+      border: 1px solid #4b5563; /* slate-600 */
+    }
+    .name-input-editable-area div[data-type="image"] img {
+      width: 22px; 
+      height: 22px; 
+      object-fit: cover; 
+      border-radius: 50%; /* circular images */
+    }
+    /* .image-filename class is no longer used for display */
+    /*
+    .name-input-editable-area .image-filename {
+      font-size: 0.9em; 
+      color: #e5e7eb; 
+      max-width: 150px; 
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    */
+    .name-input-editable-area div[data-type="text"] {
+      min-height: 1.6em; /* Ensures empty lines are clickable and maintain line height */
+      padding: 1px 0; /* Minimal vertical padding for text lines */
+    }
+    .name-input-editable-area div[data-type="text"] br {
+        display: none; 
+    }
+    
+    .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; border-radius: 10px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #ec4899; border-radius: 10px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #db2777; }
+
+    /* Notification Animations */
+    @keyframes notificationSlideIn {
+      from {
+        opacity: 0;
+        transform: translateX(100%);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+    @keyframes notificationFadeOut {
+      from {
+        opacity: 1;
+        transform: translateX(0);
+      }
+      to {
+        opacity: 0;
+        transform: translateX(100%);
+      }
+    }
+    .notification-enter {
+      animation: notificationSlideIn 0.3s ease-out forwards;
+    }
+    .notification-exit {
+      animation: notificationFadeOut 0.5s ease-in forwards;
+    }
+
+  </style>
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
+    "react/": "https://esm.sh/react@^19.1.0/",
+    "react": "https://esm.sh/react@^19.1.0",
+    "react-dom": "https://esm.sh/react-dom@^19.1.0"
+  }
+}
+</script>
+</head>
+<body class="bg-slate-900">
+  <div id="root"></div>
+  <div id="notification-root"></div> <!-- Placeholder for notifications -->
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html><link rel="stylesheet" href="index.css">
+<script src="index.tsx" type="module"></script>
