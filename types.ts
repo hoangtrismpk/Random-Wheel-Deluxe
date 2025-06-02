@@ -1,4 +1,5 @@
 
+
 export interface WheelSegment {
   text: string;
   color: string;
@@ -60,11 +61,18 @@ export interface LinearGradientBackgroundConfig {
   stops: GradientColorStop[];
 }
 
+export interface RadialGradientBackgroundConfigForWheel { // Renamed to avoid conflict if used elsewhere with different constraints
+  type: 'radial-gradient';
+  shape: 'circle' | 'ellipse';
+  position: string; // e.g., 'center', 'top left', '50% 50%'
+  stops: GradientColorStop[];
+}
+
 // Represents a solid color (string like '#RRGGBB') or a gradient configuration, or null for default
-export type WheelDynamicBackground = string | LinearGradientBackgroundConfig | null;
+export type WheelDynamicBackground = string | LinearGradientBackgroundConfig | RadialGradientBackgroundConfigForWheel | null;
 
 // Types for global application background customization
-export interface RadialGradientBackgroundConfig {
+export interface RadialGradientBackgroundConfig { // This is the original AppGlobalBackground one
   type: 'radial-gradient';
   shape: 'circle' | 'ellipse';
   position: string; // e.g., 'center', 'top left', '50% 50%'
@@ -73,6 +81,6 @@ export interface RadialGradientBackgroundConfig {
 
 export type AppGlobalBackground = 
   | string // Solid color
-  | LinearGradientBackgroundConfig
-  | RadialGradientBackgroundConfig
+  | LinearGradientBackgroundConfig // Re-using the same structure for linear
+  | RadialGradientBackgroundConfig // Re-using the same structure for radial
   | null; // Null means use default Tailwind classes

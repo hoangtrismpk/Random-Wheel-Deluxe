@@ -52,11 +52,10 @@
     .name-input-editable-area div[data-type="image"] > span[contenteditable="false"] {
       display: inline-flex; 
       align-items: center; 
-      /* gap: 6px; Removed as filename text is gone */
       background-color: #334155; /* slate-700 */
-      padding: 3px 6px; /* Adjusted padding slightly if needed */
+      padding: 3px 6px; 
       border-radius: 12px; /* Pill shape */
-      vertical-align: middle; /* Aligns better with text if mixed */
+      vertical-align: middle; 
       border: 1px solid #4b5563; /* slate-600 */
     }
     .name-input-editable-area div[data-type="image"] img {
@@ -65,20 +64,9 @@
       object-fit: cover; 
       border-radius: 50%; /* circular images */
     }
-    /* .image-filename class is no longer used for display */
-    /*
-    .name-input-editable-area .image-filename {
-      font-size: 0.9em; 
-      color: #e5e7eb; 
-      max-width: 150px; 
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    */
     .name-input-editable-area div[data-type="text"] {
-      min-height: 1.6em; /* Ensures empty lines are clickable and maintain line height */
-      padding: 1px 0; /* Minimal vertical padding for text lines */
+      min-height: 1.6em; 
+      padding: 1px 0; 
     }
     .name-input-editable-area div[data-type="text"] br {
         display: none; 
@@ -91,30 +79,137 @@
 
     /* Notification Animations */
     @keyframes notificationSlideIn {
-      from {
-        opacity: 0;
-        transform: translateX(100%);
-      }
-      to {
-        opacity: 1;
-        transform: translateX(0);
-      }
+      from { opacity: 0; transform: translateX(100%); }
+      to { opacity: 1; transform: translateX(0); }
     }
     @keyframes notificationFadeOut {
-      from {
-        opacity: 1;
-        transform: translateX(0);
-      }
-      to {
-        opacity: 0;
-        transform: translateX(100%);
-      }
+      from { opacity: 1; transform: translateX(0); }
+      to { opacity: 0; transform: translateX(100%); }
     }
-    .notification-enter {
-      animation: notificationSlideIn 0.3s ease-out forwards;
+    .notification-enter { animation: notificationSlideIn 0.3s ease-out forwards; }
+    .notification-exit { animation: notificationFadeOut 0.5s ease-in forwards; }
+
+    /* Slider Styles */
+    :root {
+      --slider-fill-color: #2563eb; /* Tailwind blue-600 */
+      --slider-track-color: #4b5563; /* Tailwind slate-600 */
+      --slider-thumb-color: #2563eb; /* Tailwind blue-600 */
+      --slider-thumb-border-color: #e2e8f0; /* Tailwind slate-200 for a light border */
+      --slider-thumb-hover-glow-color-rgb: 37, 99, 235; /* RGB for blue-600 */
+      --slider-thumb-hover-glow-opacity: 0.3;
+      --slider-thumb-hover-glow-size: 5px; /* Glow radius - CHANGED FROM 3px to 5px */
+      --slider-thumb-size: 16px;
+      --slider-track-height: 6px;
     }
-    .notification-exit {
-      animation: notificationFadeOut 0.5s ease-in forwards;
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: var(--slider-thumb-size); /* Height to contain thumb and hover effect */
+      background: transparent; /* Otherwise track styles may not apply */
+      cursor: pointer;
+      outline: none;
+    }
+    input[type="range"]:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    /* Webkit Track */
+    input[type="range"]::-webkit-slider-runnable-track {
+      width: 100%;
+      height: var(--slider-track-height);
+      background: linear-gradient(to right, 
+        var(--slider-fill-color) 0%, 
+        var(--slider-fill-color) var(--value-percent, 0%), 
+        var(--slider-track-color) var(--value-percent, 0%), 
+        var(--slider-track-color) 100%);
+      border-radius: calc(var(--slider-track-height) / 2);
+    }
+
+    /* Webkit Thumb */
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      margin-top: calc((var(--slider-track-height) - var(--slider-thumb-size)) / 2); /* Center thumb on track */
+      height: var(--slider-thumb-size);
+      width: var(--slider-thumb-size);
+      background-color: var(--slider-thumb-color);
+      border: 1px solid var(--slider-thumb-border-color);
+      border-radius: 50%;
+      transition: box-shadow 0.15s ease-in-out;
+    }
+    input[type="range"]:not(:disabled)::-webkit-slider-thumb:hover {
+      box-shadow: 0 0 0 var(--slider-thumb-hover-glow-size) rgba(var(--slider-thumb-hover-glow-color-rgb), var(--slider-thumb-hover-glow-opacity));
+    }
+    input[type="range"]:focus::-webkit-slider-thumb { /* Optional: focus style for thumb */
+       box-shadow: 0 0 0 calc(var(--slider-thumb-hover-glow-size) + 2px) rgba(var(--slider-thumb-hover-glow-color-rgb), calc(var(--slider-thumb-hover-glow-opacity) + 0.1));
+    }
+
+
+    /* Mozilla Track */
+    input[type="range"]::-moz-range-track {
+      width: 100%;
+      height: var(--slider-track-height);
+      background: linear-gradient(to right, 
+        var(--slider-fill-color) 0%, 
+        var(--slider-fill-color) var(--value-percent, 0%), 
+        var(--slider-track-color) var(--value-percent, 0%), 
+        var(--slider-track-color) 100%);
+      border-radius: calc(var(--slider-track-height) / 2);
+      border: none; /* Reset default border */
+    }
+
+    /* Mozilla Thumb */
+    input[type="range"]::-moz-range-thumb {
+      height: var(--slider-thumb-size);
+      width: var(--slider-thumb-size);
+      background-color: var(--slider-thumb-color);
+      border: 1px solid var(--slider-thumb-border-color);
+      border-radius: 50%;
+      transition: box-shadow 0.15s ease-in-out;
+    }
+     input[type="range"]:not(:disabled)::-moz-range-thumb:hover {
+      box-shadow: 0 0 0 var(--slider-thumb-hover-glow-size) rgba(var(--slider-thumb-hover-glow-color-rgb), var(--slider-thumb-hover-glow-opacity));
+    }
+    input[type="range"]:focus::-moz-range-thumb { /* Optional: focus style for thumb */
+       box-shadow: 0 0 0 calc(var(--slider-thumb-hover-glow-size) + 2px) rgba(var(--slider-thumb-hover-glow-color-rgb), calc(var(--slider-thumb-hover-glow-opacity) + 0.1));
+    }
+
+    /* Slider Tooltip Styles */
+    .slider-tooltip {
+      position: absolute;
+      background-color: #2563eb; /* Tailwind blue-600 */
+      color: white;
+      padding: 3px 7px; 
+      border-radius: 5px; 
+      font-size: 0.75rem; /* text-xs */
+      font-weight: 600; /* semibold */
+      transform: translateX(-50%); /* Center the tooltip */
+      white-space: nowrap;
+      top: -30px; /* Position above the slider */
+      pointer-events: none;
+      z-index: 10;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+      visibility: hidden; /* Hidden by default, JS will control visibility */
+      opacity: 0;
+      transition: opacity 0.15s ease-in-out, visibility 0s linear 0.15s; /* Smooth fade */
+    }
+    .slider-tooltip.visible {
+      visibility: visible;
+      opacity: 1;
+      transition: opacity 0.15s ease-in-out, visibility 0s linear 0s;
+    }
+    .slider-tooltip::after { /* Triangle */
+      content: "";
+      position: absolute;
+      top: 100%; 
+      left: 50%;
+      transform: translateX(-50%);
+      border-width: 5px;
+      border-style: solid;
+      border-color: #2563eb transparent transparent transparent; 
     }
 
   </style>
@@ -128,11 +223,11 @@
   }
 }
 </script>
+<link rel="stylesheet" href="/index.css">
 </head>
 <body class="bg-slate-900">
   <div id="root"></div>
   <div id="notification-root"></div> <!-- Placeholder for notifications -->
   <script type="module" src="/index.tsx"></script>
 </body>
-</html><link rel="stylesheet" href="index.css">
-<script src="index.tsx" type="module"></script>
+</html>

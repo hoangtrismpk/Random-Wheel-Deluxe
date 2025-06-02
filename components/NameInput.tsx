@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { ImageStore, ImageAsset } from '../App'; // Import ImageStore type
 import { useNotification } from './NotificationContext'; // Import useNotification
@@ -47,30 +46,30 @@ const deriveNamesFromDOM = (container: HTMLDivElement | null, currentImageStore:
       const hasActualImageStructure = !!imgElement;
 
       if (type === 'image' && id && currentImageStore[id] && hasActualImageStructure) {
-        const textContent = child.textContent || '';
-        const textContentWithoutZWS = textContent.replace(/\u200B/g, '').trim();
-
-        if (textContentWithoutZWS === '') {
-          derivedNames.push(id);
+        derivedNames.push(id);
+      } else { 
+        // Handle text content, potentially with <br> tags or plain text newlines
+        if (child.innerHTML.trim().toLowerCase() === '<br>') { // Check for <div><br></div> specifically
+          derivedNames.push(''); 
         } else {
-          // This case should ideally not happen if ZWS is the only text content for images
-          derivedNames.push(textContentWithoutZWS);
-        }
-      } else {
-        if (child.innerHTML.toLowerCase() === '<br>') {
-          derivedNames.push('');
-        } else {
-          const textContent = child.textContent || '';
-          // Preserve internal newlines within a single div as spaces, then trim.
-          // Actual line breaks are handled by separate divs.
-          const normalizedText = textContent.replace(/\r\n?|\n/g, ' ');
-          const trimmedText = normalizedText.trim();
+          const brPattern = /<br\s*\/?>/gi;
+          // First, split by <br> tags to handle HTML line breaks (e.g., from Excel)
+          const htmlSegments = child.innerHTML.split(brPattern);
+          
+          htmlSegments.forEach((segmentHTML) => {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = segmentHTML; // Use innerHTML to correctly parse the segment
+            const textContentOfSegment = tempDiv.textContent || '';
 
-          if (trimmedText === '\u200B') { // ZWS from an image placeholder that lost its structure
-            derivedNames.push('');
-          } else {
-            derivedNames.push(trimmedText);
-          }
+            // Then, split the textContent of this segment by actual newline characters
+            // This handles plain text newlines (e.g., from Notepad)
+            const linesFromTextContent = textContentOfSegment.split(/\r\n?|\n/);
+
+            linesFromTextContent.forEach(finalLine => {
+              // Clean and push each final line
+              derivedNames.push(finalLine.replace(/\u200B/g, '').trim());
+            });
+          });
         }
       }
     }
@@ -121,7 +120,7 @@ const NameInput: React.FC<NameInputProps> = ({
         newHtml += `<div data-type="image" data-id="${nameOrId}">` +
                      `<span contenteditable="false">` +
                        `<img src="${asset.dataURL}" alt="${escapedFileName}" />` +
-                     `</span>\u200B` + // Zero-width space
+                     `</span>\u200B` + 
                    `</div>`;
       } else {
         const escapedText = escapeHtml(nameOrId);
@@ -198,62 +197,49 @@ const NameInput: React.FC<NameInputProps> = ({
     event.preventDefault();
     const pastedText = event.clipboardData.getData('text/plain');
     const lines = pastedText.split(/\r\n?|\n/);
-    
-    const htmlToInsert = lines.map(line => {
-      const escapedLine = escapeHtml(line);
-      return `<div>${escapedLine === '' ? '<br>' : escapedLine}</div>`;
-    }).join('');
 
     const selection = window.getSelection();
-    if (selection && editableDivRef.current && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        if (!editableDivRef.current.contains(range.commonAncestorContainer)) {
-            editableDivRef.current.focus();
-            const newRange = document.createRange();
-            newRange.selectNodeContents(editableDivRef.current);
-            selection.removeAllRanges();
-            selection.addRange(newRange);
-        }
-    } else if (editableDivRef.current) {
-        editableDivRef.current.focus();
-        const newRange = document.createRange();
-        newRange.selectNodeContents(editableDivRef.current);
-        newRange.collapse(false); 
-        if(selection) {
-            selection.removeAllRanges();
-            selection.addRange(newRange);
-        }
+    if (!selection || !editableDivRef.current) {
+        addNotification('Không thể dán nội dung: lỗi vùng chọn.', 'error');
+        return;
+    }
+    
+    let range: Range;
+    if (selection.rangeCount > 0 && editableDivRef.current.contains(selection.getRangeAt(0).commonAncestorContainer)) {
+        range = selection.getRangeAt(0);
+    } else {
+        editableDivRef.current.focus(); 
+        range = document.createRange();
+        range.selectNodeContents(editableDivRef.current);
+        range.collapse(false); 
+        selection.removeAllRanges();
+        selection.addRange(range);
     }
 
-    if (!document.execCommand('insertHTML', false, htmlToInsert)) {
-        addNotification('Lỗi khi dán nội dung. Vui lòng thử lại hoặc nhập thủ công.', 'error');
-        const sel = window.getSelection();
-        if (!sel || !sel.rangeCount || !editableDivRef.current) return;
-        let range = sel.getRangeAt(0);
-        if (!editableDivRef.current.contains(range.commonAncestorContainer)) {
-            range.selectNodeContents(editableDivRef.current);
-            range.collapse(false);
-        }
-        range.deleteContents();
-        const fragment = document.createDocumentFragment();
-        lines.forEach((line) => {
-            const div = document.createElement('div');
-            div.setAttribute('data-type', 'text');
-            if (line === '') div.innerHTML = '<br>';
-            else div.textContent = line;
-            fragment.appendChild(div);
-        });
-        range.insertNode(fragment);
-        if (fragment.lastChild) {
-            range.setStartAfter(fragment.lastChild);
-            range.collapse(true);
-            sel.removeAllRanges();
-            sel.addRange(range);
-        }
+    range.deleteContents(); 
+
+    const fragment = document.createDocumentFragment();
+    lines.forEach((line) => {
+      const div = document.createElement('div');
+      if (line.trim() === '') { 
+        div.innerHTML = '<br>';
+      } else {
+        div.textContent = line; 
+      }
+      fragment.appendChild(div);
+    });
+
+    const lastNodeOfFragment = fragment.lastChild; 
+    range.insertNode(fragment);
+
+    if (lastNodeOfFragment) {
+      range.setStartAfter(lastNodeOfFragment);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
     }
     
     lastUserEditTimeRef.current = Date.now();
-    isProgrammaticUpdateRef.current = false; 
     triggerNamesUpdateFromDOM();
   };
 

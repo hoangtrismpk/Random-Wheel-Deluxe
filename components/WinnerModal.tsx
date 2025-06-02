@@ -10,6 +10,7 @@ interface WinnerModalProps {
   onClose: () => void;
   onRemove: () => void;
   giftDetails?: { title: string; name: string } | null; // Thêm chi tiết quà tặng
+  autoRemoveWinnerActive?: boolean; // New prop
 }
 
 const WinnerModal: React.FC<WinnerModalProps> = ({
@@ -19,7 +20,8 @@ const WinnerModal: React.FC<WinnerModalProps> = ({
   imageStore,
   onClose,
   onRemove,
-  giftDetails
+  giftDetails,
+  autoRemoveWinnerActive = false // Default to false
 }) => {
   const getVisuallyNonEmptyName = (name: string | null): string | null => {
     if (!name) return null;
@@ -97,18 +99,19 @@ const WinnerModal: React.FC<WinnerModalProps> = ({
           >
             Đóng
           </button>
-          <button
-            onClick={onRemove}
-            disabled={!winnerItem}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label={
-              nameForDisplay
-                ? `Xóa ${nameForDisplay} khỏi danh sách và cập nhật vòng quay`
-                : (winnerItem ? "Xóa người chiến thắng đã chọn khỏi danh sách" : "Xóa người chiến thắng khỏi danh sách")
-            }
-          >
-            Xóa người trúng
-          </button>
+          {!autoRemoveWinnerActive && winnerItem && (
+            <button
+              onClick={onRemove}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-blue-500 transition-colors"
+              aria-label={
+                nameForDisplay
+                  ? `Xóa ${nameForDisplay} khỏi danh sách và cập nhật vòng quay`
+                  : (winnerItem ? "Xóa người chiến thắng đã chọn khỏi danh sách" : "Xóa người chiến thắng khỏi danh sách")
+              }
+            >
+              Xóa người trúng
+            </button>
+          )}
         </div>
       </div>
     </div>

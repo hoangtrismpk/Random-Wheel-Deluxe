@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import WheelCanvas from './components/WheelCanvas';
 import NameInput from './components/NameInput';
 import WinnerModal from './components/WinnerModal';
@@ -9,6 +9,10 @@ import ConfirmationModal from './components/ConfirmationModal'; // Import Confir
 import BoostWinRateInput from './components/BoostWinRateInput'; // Import BoostWinRateInput
 import WheelBackgroundColorPicker from './components/WheelBackgroundColorPicker'; // Import new component
 import AppBackgroundColorPicker from './components/AppBackgroundColorPicker'; // Import new component for global background
+import WheelTextColorPicker from './components/WheelTextColorPicker'; // Import new component for wheel text color
+import TitleTextEditor from './components/TitleTextEditor'; // Import new component for title text
+import TitleColorPicker from './components/TitleColorPicker'; // Import new component for title color
+import TickSoundSelector from './components/TickSoundSelector'; // Import new component for tick sound
 import type { GiftItem, WinnerHistoryItem, WinnerDetails, GiftAwardHistoryItem, NonGiftWinnerHistoryItem, BoostedParticipant, WheelDynamicBackground, AppGlobalBackground } from './types'; // Kiểu dữ liệu mới
 import { useNotification } from './components/NotificationContext'; // Import useNotification
 
@@ -36,6 +40,38 @@ const shuffleArray = (array: string[]): string[] => {
   return newArray;
 };
 
+const DEFAULT_WHEEL_TEXT_COLOR = "#1F2937";
+const DEFAULT_TITLE_TEXT = "Vòng Quay May Mắn\nPhiên Bản Đặc Biệt";
+
+export interface SoundOption {
+  name: string;
+  url: string;
+  fixedDuration?: number; // in seconds, locks spin duration
+  isContinuous?: boolean; // If true, plays continuously during spin
+}
+
+export const CUSTOM_SOUND_URL_PLACEHOLDER = "custom_sound_placeholder_url";
+
+const AVAILABLE_TICK_SOUNDS: SoundOption[] = [
+  { name: "Âm kim loại", url: "https://irace.vn/wp-content/uploads/2025/06/am-thanh-quay-3.mp3" },
+  { name: "Âm gỗ", url: "https://irace.vn/wp-content/uploads/2025/05/am-thanh-quay-2.mp3" },
+  { name: "Chiếc nón kỳ diệu", url: "https://irace.vn/wp-content/uploads/2025/06/chiec_non_ly_dieu.mp3", fixedDuration: 20, isContinuous: true },
+  { name: "Tiếng Trống (8s)", url: "https://irace.vn/wp-content/uploads/2025/06/tieng-trong-8s.mp3", fixedDuration: 8, isContinuous: true },
+  { name: "Tiếng trống (16s)", url: "https://irace.vn/wp-content/uploads/2025/06/tieng-trong-16s.mp3", fixedDuration: 16, isContinuous: true },
+  { name: "Tiếng trống (20s)", url: "https://irace.vn/wp-content/uploads/2025/06/tieng_trong-20s.mp3", fixedDuration: 20, isContinuous: true },
+];
+
+const DEFAULT_TICK_SOUND_URL = AVAILABLE_TICK_SOUNDS[0].url;
+const DEFAULT_SPIN_DURATION_MS = 10000;
+
+
+type SpinOptionTab = 'beforeSpin' | 'duringSpin' | 'afterSpin';
+
+// --- Configuration for Spin Animation Speed ---
+const DESIRED_INITIAL_ANGULAR_VELOCITY_RAD_PER_MS = 0.025; 
+const ABSOLUTE_MIN_TOTAL_SPINS = 4;
+const EPSILON_FINISH = 0.001; // Small tolerance for comparing rotation angles (in radians)
+
 
 const App: React.FC = () => {
   const [names, setNames] = useState<string[]>(['Nguyễn Văn An', 'Trần Thị Bích', 'Lê Minh Cường', 'Phạm Thu Hà', 'Hoàng Đức Hải', 'Vũ Ngọc Lan', 'Đặng Tiến Dũng', 'Bùi Thanh Mai']);
@@ -44,15 +80,17 @@ const App: React.FC = () => {
   const [selectedName, setSelectedName] = useState<string | null>(null); 
   const [selectedItem, setSelectedItem] = useState<string | null>(null); 
   const [showConfetti, setShowConfetti] = useState(false);
-  const [spinDuration, setSpinDuration] = useState<number>(10000); 
+  const [spinDuration, setSpinDuration] = useState<number>(DEFAULT_SPIN_DURATION_MS); 
+  const [isSpinDurationLocked, setIsSpinDurationLocked] = useState<boolean>(false);
   const [showWinnerModal, setShowWinnerModal] = useState(false);
   const [winnerHistory, setWinnerHistory] = useState<WinnerHistoryItem[]>([]);
-  const [wheelAreaDimension, setWheelAreaDimension] = useState(500); // Renamed from calculatedCanvasSize
+  const [wheelAreaDimension, setWheelAreaDimension] = useState(500); 
   
   const [centerImageSrc, setCenterImageSrc] = useState<string | null>(null);
   const [wheelBackgroundImageSrc, setWheelBackgroundImageSrc] = useState<string | null>(null);
   const [wheelDynamicBackground, setWheelDynamicBackground] = useState<WheelDynamicBackground>(null); 
-  const [appGlobalBackground, setAppGlobalBackground] = useState<AppGlobalBackground>(null); // For global app background
+  const [wheelTextColor, setWheelTextColor] = useState<string>(DEFAULT_WHEEL_TEXT_COLOR); 
+  const [appGlobalBackground, setAppGlobalBackground] = useState<AppGlobalBackground>(null); 
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [imageSelectionPurpose, setImageSelectionPurpose] = useState<'centerLogo' | 'wheelBackground' | null>(null);
 
@@ -62,26 +100,40 @@ const App: React.FC = () => {
 
   const [imageStore, setImageStore] = useState<ImageStore>({});
   const [autoShuffle, setAutoShuffle] = useState<boolean>(false);
-  const [spinJustCompletedWithAutoShuffle, setSpinJustCompletedWithAutoShuffle] = useState<boolean>(false);
+  const [autoRemoveWinner, setAutoRemoveWinner] = useState<boolean>(false);
+  const [pendingWinnerForAutoRemoval, setPendingWinnerForAutoRemoval] = useState<WinnerDetails | null>(null); 
 
   const [activeTab, setActiveTab] = useState<'nameInput' | 'results'>('nameInput');
   const [isSpinOptionsOpen, setIsSpinOptionsOpen] = useState<boolean>(false);
+  const [activeSpinOptionTab, setActiveSpinOptionTab] = useState<SpinOptionTab>('beforeSpin');
   const [isWheelCustomizationOpen, setIsWheelCustomizationOpen] = useState<boolean>(false);
-  const [isAppAppearanceOpen, setIsAppAppearanceOpen] = useState<boolean>(false); // For global appearance
-  const [isBoostWinRateOpen, setIsBoostWinRateOpen] = useState<boolean>(false); // State for new section
+  const [isAppAppearanceOpen, setIsAppAppearanceOpen] = useState<boolean>(false); 
+  const [showBoostWinRateSectionInTab, setShowBoostWinRateSectionInTab] = useState<boolean>(false); // New state
 
-  // State cho tính năng danh sách quà
   const [useGiftList, setUseGiftList] = useState<boolean>(false);
   const [giftList, setGiftList] = useState<GiftItem[]>([]);
   const [currentGiftForModal, setCurrentGiftForModal] = useState<{ title: string; name: string } | null>(null);
   
-  const { addNotification } = useNotification(); // Hook for notifications
+  const { addNotification } = useNotification(); 
 
-  // State for confirmation modal for clearing history
   const [showClearHistoryConfirmModal, setShowClearHistoryConfirmModal] = useState(false);
 
-  // State for Boost Win Rate
   const [boostedParticipants, setBoostedParticipants] = useState<BoostedParticipant[]>([]);
+
+  const [titleText, setTitleText] = useState<string>(DEFAULT_TITLE_TEXT);
+  const [titleColorConfig, setTitleColorConfig] = useState<AppGlobalBackground>(null);
+
+  const [selectedTickSoundUrl, setSelectedTickSoundUrl] = useState<string>(DEFAULT_TICK_SOUND_URL);
+  const [customSoundDataUrl, setCustomSoundDataUrl] = useState<string | null>(null);
+  const [customSoundName, setCustomSoundName] = useState<string | null>(null);
+  const [customSoundDurationSeconds, setCustomSoundDurationSeconds] = useState<number | null>(null);
+  const [activeTickSoundElement, setActiveTickSoundElement] = useState<HTMLAudioElement | null>(null);
+  const [tickSoundVolume, setTickSoundVolume] = useState<number>(1); 
+  const [activeSoundIsContinuous, setActiveSoundIsContinuous] = useState<boolean>(false);
+  const audioFadeIntervalRef = useRef<number | null>(null);
+  
+  const [sliderThumbPositionStyle, setSliderThumbPositionStyle] = useState({ left: '0%' });
+  const [showSpinDurationTooltip, setShowSpinDurationTooltip] = useState(false);
 
 
   const spinStartRotationRef = useRef(0);
@@ -90,9 +142,12 @@ const App: React.FC = () => {
   const animationFrameIdRef = useRef<number | null>(null);
   const winnerIndexRef = useRef(0);
   const confettiTimerRef = useRef<number | null>(null); 
-  const wheelWrapperRef = useRef<HTMLDivElement>(null); // Ref for the wheel wrapper
-  const appContainerRef = useRef<HTMLDivElement>(null); // Ref for the main app container
+  const wheelWrapperRef = useRef<HTMLDivElement>(null); 
+  const appContainerRef = useRef<HTMLDivElement>(null); 
   const winSoundRef = useRef<HTMLAudioElement | null>(null);
+  const winningGiftRef = useRef<GiftItem | null>(null);
+  const spinDurationSliderRef = useRef<HTMLInputElement>(null); 
+
 
   useEffect(() => {
     winSoundRef.current = new Audio("https://irace.vn/wp-content/uploads/2025/05/vo-tay.mp3");
@@ -102,13 +157,165 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // Effect to apply global background changes
+
+  const handleSoundConfigChange = useCallback((config: { url: string; dataUrl?: string; fileName?: string }) => {
+    setSelectedTickSoundUrl(config.url);
+    if (config.url === CUSTOM_SOUND_URL_PLACEHOLDER && config.dataUrl && config.fileName) {
+      setCustomSoundDataUrl(config.dataUrl); // Store data URL and name
+      setCustomSoundName(config.fileName);
+      // Duration and actual audio element creation will be handled by the useEffect below
+    } else if (config.url !== CUSTOM_SOUND_URL_PLACEHOLDER) {
+      // If a predefined sound is selected, clear custom sound specifics
+      setCustomSoundDataUrl(null);
+      setCustomSoundName(null);
+      setCustomSoundDurationSeconds(null);
+    }
+  }, []);
+
+
+  useEffect(() => {
+    if (audioFadeIntervalRef.current) {
+        clearInterval(audioFadeIntervalRef.current);
+        audioFadeIntervalRef.current = null;
+    }
+    if (activeTickSoundElement) {
+        activeTickSoundElement.pause();
+        // Important: Remove event listeners to prevent memory leaks if new Audio objects are created
+        activeTickSoundElement.onloadedmetadata = null;
+        activeTickSoundElement.onerror = null;
+        activeTickSoundElement.oncanplaythrough = null;
+        activeTickSoundElement.onended = null;
+    }
+
+    let soundSourceUrlForPredefined: string | null = null;
+    let isContinuousForPredefined = false;
+    let fixedDurationForPredefined: number | undefined = undefined;
+    let isProcessingCustomSound = false;
+
+    if (selectedTickSoundUrl === CUSTOM_SOUND_URL_PLACEHOLDER && customSoundDataUrl) {
+        isProcessingCustomSound = true;
+        const audioForDuration = new Audio(customSoundDataUrl);
+        
+        audioForDuration.onloadedmetadata = () => {
+            const duration = audioForDuration.duration;
+            if (!isFinite(duration)) {
+                addNotification("Không thể xác định thời lượng âm thanh tùy chỉnh.", 'error', 5000);
+                setCustomSoundDataUrl(null); setCustomSoundName(null); setCustomSoundDurationSeconds(null);
+                setSelectedTickSoundUrl(DEFAULT_TICK_SOUND_URL); 
+                setIsSpinDurationLocked(false); 
+                setActiveTickSoundElement(null);
+                return;
+            }
+
+            if (duration < 5) {
+                addNotification("Âm thanh quá ngắn (tối thiểu 5 giây). Vui lòng chọn âm thanh khác.", 'error', 5000);
+                setCustomSoundDataUrl(null); setCustomSoundName(null); setCustomSoundDurationSeconds(null);
+                setSelectedTickSoundUrl(DEFAULT_TICK_SOUND_URL); 
+                setIsSpinDurationLocked(false);
+                setSpinDuration(DEFAULT_SPIN_DURATION_MS);
+                setActiveTickSoundElement(null);
+                return;
+            }
+            if (duration > 60) {
+                addNotification("Âm thanh quá dài (tối đa 60 giây). Vui lòng chọn âm thanh khác.", 'error', 5000);
+                setCustomSoundDataUrl(null); setCustomSoundName(null); setCustomSoundDurationSeconds(null);
+                setSelectedTickSoundUrl(DEFAULT_TICK_SOUND_URL);
+                setIsSpinDurationLocked(false);
+                setSpinDuration(DEFAULT_SPIN_DURATION_MS);
+                setActiveTickSoundElement(null);
+                return;
+            }
+
+            setCustomSoundDurationSeconds(duration);
+            setSpinDuration(Math.round(duration * 1000));
+            setIsSpinDurationLocked(false); // Custom sounds adjust max, don't hard-lock the slider
+
+            const newAudio = new Audio(customSoundDataUrl);
+            newAudio.preload = "auto";
+            newAudio.volume = tickSoundVolume;
+            newAudio.loop = true; 
+            newAudio.onerror = () => {
+                console.error(`Error loading custom sound for playback: ${customSoundName}`);
+                addNotification(<>Không thể tải âm thanh tùy chỉnh: <code className="text-xs bg-slate-700 p-0.5 rounded">{customSoundName}</code></>, 'error', 5000);
+                setActiveTickSoundElement(null);
+            };
+            setActiveTickSoundElement(newAudio);
+            setActiveSoundIsContinuous(true); // All custom sounds are treated as continuous
+        };
+        audioForDuration.onerror = () => {
+            addNotification("Lỗi khi tải siêu dữ liệu cho âm thanh tùy chỉnh.", 'error', 5000);
+            setCustomSoundDataUrl(null); setCustomSoundName(null); setCustomSoundDurationSeconds(null);
+            setSelectedTickSoundUrl(DEFAULT_TICK_SOUND_URL);
+            setIsSpinDurationLocked(false);
+            setSpinDuration(DEFAULT_SPIN_DURATION_MS);
+            setActiveTickSoundElement(null);
+        };
+        // Don't set activeTickSoundElement here directly, wait for onloadedmetadata
+    } else {
+        setCustomSoundDurationSeconds(null); // Clear if not a custom sound
+        const soundOption = AVAILABLE_TICK_SOUNDS.find(s => s.url === selectedTickSoundUrl);
+        if (soundOption) {
+            soundSourceUrlForPredefined = soundOption.url;
+            isContinuousForPredefined = !!soundOption.isContinuous;
+            fixedDurationForPredefined = soundOption.fixedDuration;
+        }
+
+        if (fixedDurationForPredefined !== undefined) {
+            setSpinDuration(fixedDurationForPredefined * 1000);
+            setIsSpinDurationLocked(true);
+        } else {
+            // If no fixed duration, and it's not a custom sound being processed,
+            // ensure spin duration isn't locked from a previous fixed sound.
+             if (selectedTickSoundUrl !== CUSTOM_SOUND_URL_PLACEHOLDER || !customSoundDataUrl) {
+                setIsSpinDurationLocked(false);
+                // Revert to default spin duration if no sound or non-fixed sound is chosen
+                // UNLESS a custom sound was just deselected (in which case, customSoundDurationSeconds would be null)
+                // This maintains user's slider choice if they switch between non-fixed sounds.
+                // If they deselect a custom sound, spin duration should revert or be user-adjustable.
+                // The current spinDuration state will persist unless explicitly changed.
+            }
+        }
+        setActiveSoundIsContinuous(isContinuousForPredefined);
+        if (soundSourceUrlForPredefined) {
+            const newAudio = new Audio(soundSourceUrlForPredefined);
+            newAudio.preload = "auto";
+            newAudio.volume = tickSoundVolume;
+            if (isContinuousForPredefined) newAudio.loop = true;
+            newAudio.onerror = () => {
+                console.error(`Error loading sound from: ${soundSourceUrlForPredefined}`);
+                addNotification(<>Không thể tải âm thanh từ: <code className="text-xs bg-slate-700 p-0.5 rounded">{soundSourceUrlForPredefined}</code></>, 'error', 5000);
+                setActiveTickSoundElement(null);
+            };
+            setActiveTickSoundElement(newAudio);
+        } else {
+             setActiveTickSoundElement(null); // No sound selected or invalid predefined
+        }
+    }
+    
+    if (isProcessingCustomSound) {
+        // For custom sound, main audio element is set up in onloadedmetadata, so clear any stale one here.
+        // However, this might cause a flicker if the old activeTickSoundElement was playing.
+        // The initial pause should handle it.
+        setActiveTickSoundElement(null); // Ensure no old sound plays while custom is loading meta
+        setActiveSoundIsContinuous(true); // Assume custom will be continuous
+    }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTickSoundUrl, customSoundDataUrl, tickSoundVolume, addNotification]); // customSoundName is implicitly handled via customSoundDataUrl
+
+
+  useEffect(() => {
+    if (activeTickSoundElement) {
+      activeTickSoundElement.volume = tickSoundVolume;
+    }
+  }, [tickSoundVolume, activeTickSoundElement]);
+
+
   useEffect(() => {
     if (appContainerRef.current) {
       const baseClasses = "min-h-screen text-slate-100 flex flex-col items-center p-4 space-y-6";
       const defaultBgClasses = ['bg-gradient-to-br', 'from-slate-900', 'via-purple-900', 'to-slate-900'];
       
-      // Remove all potential background classes first
       appContainerRef.current.classList.remove(...defaultBgClasses);
       appContainerRef.current.style.background = '';
 
@@ -116,7 +323,7 @@ const App: React.FC = () => {
       if (appGlobalBackground === null) {
         appContainerRef.current.classList.add(...defaultBgClasses);
         appContainerRef.current.className = `${baseClasses} ${defaultBgClasses.join(' ')}`;
-      } else if (typeof appGlobalBackground === 'string') { // Solid color
+      } else if (typeof appGlobalBackground === 'string') { 
         appContainerRef.current.style.background = appGlobalBackground;
         appContainerRef.current.className = baseClasses;
       } else if (appGlobalBackground.type === 'linear-gradient') {
@@ -182,6 +389,120 @@ const App: React.FC = () => {
     if (!useGiftList || giftList.length === 0) return null;
     return giftList.find(gift => gift.quantity > 0) || null;
   };
+  
+  const animateSpin = useCallback((timestamp: number) => {
+    if (!spinStartTimeRef.current) spinStartTimeRef.current = timestamp; 
+    const elapsed = timestamp - spinStartTimeRef.current;
+    const startRotation = spinStartRotationRef.current;
+    const targetRotation = targetRotationRef.current;
+    const totalDeltaRotation = targetRotation - startRotation;
+    
+    let currentFrameRotation = startRotation; 
+    let timePhysicallyUp = elapsed >= spinDuration;
+    let rotationNumericallyAtTarget = false;
+
+    if (!timePhysicallyUp) {
+        currentFrameRotation = easeOutQuart(elapsed, startRotation, totalDeltaRotation, spinDuration);
+        rotationNumericallyAtTarget = Math.abs(currentFrameRotation - targetRotation) < EPSILON_FINISH;
+    }
+
+    if (timePhysicallyUp || (rotationNumericallyAtTarget && elapsed > 50)) { 
+      currentFrameRotation = targetRotation; 
+      setCurrentRotation(currentFrameRotation);
+      animationFrameIdRef.current = null;
+
+      if (activeTickSoundElement && activeSoundIsContinuous && !activeTickSoundElement.paused) {
+        // Clear any pre-existing fade interval, just in case
+        if (audioFadeIntervalRef.current) {
+            clearInterval(audioFadeIntervalRef.current);
+            audioFadeIntervalRef.current = null;
+        }
+
+        // Store the user-set volume to restore after stopping
+        const userSetVolume = tickSoundVolume;
+
+        // Mute, pause, and reset the sound
+        activeTickSoundElement.volume = 0; // Mute immediately
+        activeTickSoundElement.pause();
+        activeTickSoundElement.currentTime = 0;
+        activeTickSoundElement.loop = false; // Prevent further looping (spinWheel will set it true again if needed)
+        
+        // Restore the volume property on the audio element to the user's setting
+        // This way, the element is ready for the next play command with the correct volume.
+        activeTickSoundElement.volume = userSetVolume;
+      }
+
+
+      const winnerIdOrName = names[winnerIndexRef.current];
+      const winnerImageAsset = imageStore[winnerIdOrName];
+      const winnerDisplayName = winnerImageAsset?.fileName || winnerIdOrName;
+      const trimmedWinnerDisplayName = winnerDisplayName ? winnerDisplayName.trim() : "";
+
+      if (trimmedWinnerDisplayName.length > 0 || winnerImageAsset) {
+        setSelectedName(trimmedWinnerDisplayName);
+        setSelectedItem(winnerIdOrName);
+
+        const winnerDetails: WinnerDetails = {
+          id: winnerIdOrName,
+          displayName: trimmedWinnerDisplayName,
+          isImage: !!winnerImageAsset,
+          imageDataURL: winnerImageAsset?.dataURL,
+        };
+        
+        if (autoRemoveWinner) {
+            setPendingWinnerForAutoRemoval(winnerDetails); 
+        }
+
+        if (useGiftList && winningGiftRef.current) {
+          const awardedGift = winningGiftRef.current;
+          setWinnerHistory(prevHistory => [
+            ...prevHistory,
+            {
+              type: 'gift',
+              giftTitle: awardedGift.title,
+              giftAwardedName: awardedGift.giftName,
+              winner: winnerDetails,
+              timestamp: Date.now()
+            }
+          ]);
+          setGiftList(prevGifts => prevGifts.map(gift =>
+            gift.id === awardedGift.id
+            ? { ...gift, quantity: gift.quantity - 1 }
+            : gift
+          ));
+        } else {
+          setWinnerHistory(prevHistory => [
+            ...prevHistory,
+            {
+              type: 'standard',
+              winner: winnerDetails,
+              timestamp: Date.now()
+            }
+          ]);
+        }
+        setShowWinnerModal(true);
+        setShowConfetti(true);
+        if (winSoundRef.current) {
+          winSoundRef.current.currentTime = 0;
+          winSoundRef.current.play().catch(error => {
+            console.warn("Không thể phát âm thanh chiến thắng:", error);
+            addNotification("Không thể phát âm thanh. Trình duyệt có thể đã chặn tự động phát.", "info", 5000);
+          });
+        }
+      } else {
+        addNotification("Vòng quay dừng lại ở một mục không hợp lệ hoặc trống.", 'error');
+        setSelectedName(null);
+        setSelectedItem(null);
+      }
+
+      setIsSpinning(false);
+      return;
+    }
+
+    setCurrentRotation(currentFrameRotation);
+    animationFrameIdRef.current = requestAnimationFrame(animateSpin);
+  }, [spinDuration, names, imageStore, useGiftList, autoRemoveWinner, addNotification, setGiftList, setWinnerHistory, activeTickSoundElement, activeSoundIsContinuous, tickSoundVolume]);
+
 
   const spinWheel = useCallback(() => {
     if (names.length === 0 || isSpinning) return;
@@ -193,6 +514,19 @@ const App: React.FC = () => {
       });
     }
 
+    if (audioFadeIntervalRef.current) {
+        clearInterval(audioFadeIntervalRef.current);
+        audioFadeIntervalRef.current = null;
+        if(activeTickSoundElement) activeTickSoundElement.volume = tickSoundVolume; 
+    }
+    if (activeTickSoundElement && activeSoundIsContinuous) {
+        activeTickSoundElement.currentTime = 0;
+        activeTickSoundElement.volume = tickSoundVolume; 
+        activeTickSoundElement.loop = true; 
+        activeTickSoundElement.play().catch(e => console.warn("Continuous sound play failed:", e));
+    }
+
+
     let currentGiftToAward: GiftItem | null = null;
     if (useGiftList) {
       currentGiftToAward = getCurrentGiftToSpinFor();
@@ -200,24 +534,26 @@ const App: React.FC = () => {
         addNotification("Tất cả các phần quà đã được trao hoặc danh sách quà trống!", 'info');
         return;
       }
+      setCurrentGiftForModal({ title: currentGiftToAward.title, name: currentGiftToAward.giftName });
+      winningGiftRef.current = currentGiftToAward;
+    } else {
+      setCurrentGiftForModal(null); 
+      winningGiftRef.current = null;
     }
 
     setIsSpinning(true);
     setSelectedName(null);
     setSelectedItem(null);
     setShowWinnerModal(false);
-    setCurrentGiftForModal(null);
-    setSpinJustCompletedWithAutoShuffle(false); 
+    setPendingWinnerForAutoRemoval(null); 
 
     let chosenWinnerIndex = -1;
-
     const wheelItemsWithDetails = names.map((nameOrId, index) => ({
       originalIdOrName: nameOrId,
       displayName: (imageStore[nameOrId]?.fileName || nameOrId).trim().toLowerCase(),
       originalIndex: index,
     }));
 
-    // 1. Priority Names Check
     if (parsedPriorityNames.length > 0) {
       const validPriorityCandidatesOnWheel = wheelItemsWithDetails.filter(item =>
         parsedPriorityNames.some(priorityName => 
@@ -225,16 +561,14 @@ const App: React.FC = () => {
         )
       );
       if (validPriorityCandidatesOnWheel.length > 0) {
-        const winningPriorityItem = validPriorityCandidatesOnWheel[
+        chosenWinnerIndex = validPriorityCandidatesOnWheel[
           Math.floor(Math.random() * validPriorityCandidatesOnWheel.length)
-        ];
-        chosenWinnerIndex = winningPriorityItem.originalIndex;
+        ].originalIndex;
       }
     }
 
-    // 2. Boost Win Rate Check (if no priority winner found)
-    if (chosenWinnerIndex === -1 && boostedParticipants.length > 0) {
-      const validBoostedOnWheel = boostedParticipants
+    if (chosenWinnerIndex === -1 && boostedParticipants.length > 0 && showBoostWinRateSectionInTab) { // Check showBoostWinRateSectionInTab
+        const validBoostedOnWheel = boostedParticipants
         .map(bp => {
           const wheelItem = wheelItemsWithDetails.find(item => item.displayName === bp.name.trim().toLowerCase());
           return wheelItem ? { ...bp, originalIndex: wheelItem.originalIndex } : null;
@@ -242,12 +576,9 @@ const App: React.FC = () => {
         .filter(bpOrNull => bpOrNull !== null && bpOrNull.percentage > 0 && bpOrNull.percentage < 100) as (BoostedParticipant & { originalIndex: number })[];
 
       const totalBoostedPercentage = validBoostedOnWheel.reduce((sum, bp) => sum + bp.percentage, 0);
-
       if (totalBoostedPercentage > 0 && totalBoostedPercentage < 100) {
-        const randomNumber = Math.random() * 100; // 0 to 99.999...
+        const randomNumber = Math.random() * 100; 
         let cumulativePercentage = 0;
-
-        // Assign boosted winners first
         for (const boostedItem of validBoostedOnWheel) {
           cumulativePercentage += boostedItem.percentage;
           if (randomNumber < cumulativePercentage) {
@@ -255,22 +586,19 @@ const App: React.FC = () => {
             break;
           }
         }
-
-        // If winner is not among boosted, pick from non-boosted
         if (chosenWinnerIndex === -1) { 
           const nonBoostedOnWheel = wheelItemsWithDetails.filter(item => 
             !validBoostedOnWheel.some(bp => bp.originalIndex === item.originalIndex)
           );
           if (nonBoostedOnWheel.length > 0) {
             chosenWinnerIndex = nonBoostedOnWheel[Math.floor(Math.random() * nonBoostedOnWheel.length)].originalIndex;
-          } else if (validBoostedOnWheel.length > 0 && nonBoostedOnWheel.length === 0) {
+          } else if (validBoostedOnWheel.length > 0) { 
              chosenWinnerIndex = validBoostedOnWheel[Math.floor(Math.random() * validBoostedOnWheel.length)].originalIndex;
           }
         }
       }
     }
     
-    // 3. Standard Random Selection (if no priority or valid boosted winner determined by above logic)
     if (chosenWinnerIndex === -1) {
       if (names.length > 0) {
         chosenWinnerIndex = Math.floor(Math.random() * names.length);
@@ -279,7 +607,6 @@ const App: React.FC = () => {
         return;
       }
     }
-    
     winnerIndexRef.current = chosenWinnerIndex;
     
     let effectiveProbabilities: Array<{ nameOrId: string; probability: number }> = [];
@@ -291,7 +618,7 @@ const App: React.FC = () => {
         .filter(bpOrNull => bpOrNull !== null && bpOrNull.percentage > 0 && bpOrNull.percentage < 100) as Array<BoostedParticipant & { originalIdOrName: string }>;
     
     const totalBoostedPercentageForSpin = validBoostedForSpin.reduce((sum, bp) => sum + bp.percentage, 0);
-    const isBoostConfigValidForSpin = totalBoostedPercentageForSpin > 0 && totalBoostedPercentageForSpin < 100 && validBoostedForSpin.length > 0;
+    const isBoostConfigValidForSpin = totalBoostedPercentageForSpin > 0 && totalBoostedPercentageForSpin < 100 && validBoostedForSpin.length > 0 && showBoostWinRateSectionInTab; // Check showBoostWinRateSectionInTab
 
     if (isBoostConfigValidForSpin) {
         const remainingPercentage = 100 - totalBoostedPercentageForSpin;
@@ -320,140 +647,47 @@ const App: React.FC = () => {
 
     let cumulativeAngle = 0;
     let winnerSegmentStartAngle = 0;
-    let winnerSegmentAngleSpan = 0;
+    let winnerSegmentAngleSpan = Math.PI * 2 / (names.length > 0 ? names.length : 1);
 
     for (let i = 0; i < effectiveProbabilities.length; i++) {
-        const participantProb = effectiveProbabilities[i];
-        const segmentAngleSpan = participantProb.probability * 2 * Math.PI;
-        if (names[winnerIndexRef.current] === participantProb.nameOrId) {
-            winnerSegmentStartAngle = cumulativeAngle;
-            winnerSegmentAngleSpan = segmentAngleSpan;
-            break; 
-        }
-        cumulativeAngle += segmentAngleSpan;
-    }
-    
-    if (winnerSegmentAngleSpan === 0 && names.length > 0) {
-        const fallbackAnglePerSegment = (2 * Math.PI) / names.length;
-        winnerSegmentStartAngle = winnerIndexRef.current * fallbackAnglePerSegment;
-        winnerSegmentAngleSpan = fallbackAnglePerSegment;
-    }
-
-    const desiredFinalAngleOfPointer = -Math.PI / 2; 
-    const segmentMiddleAngleOnWheel = winnerSegmentStartAngle + winnerSegmentAngleSpan / 2;
-    let targetAngleForSegmentMiddleToAlignWithPointer = desiredFinalAngleOfPointer - segmentMiddleAngleOnWheel;
-    const randomFactor = Math.random() * 0.6 + 0.2; 
-    const randomOffsetWithinSegment = (randomFactor - 0.5) * winnerSegmentAngleSpan; 
-    let targetAngle = targetAngleForSegmentMiddleToAlignWithPointer - randomOffsetWithinSegment;
-
-    const MIN_ADDITIONAL_ROTATIONS = 6;
-    let totalTargetRotation = currentRotation + MIN_ADDITIONAL_ROTATIONS * 2 * Math.PI;
-    const currentRotRemainder = totalTargetRotation % (2 * Math.PI);
-    const normalizedTargetAngle = (targetAngle % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
-    const normalizedCurrentRotRemainder = (currentRotRemainder % (2*Math.PI) + 2 * Math.PI) % (2*Math.PI);
-    totalTargetRotation += (normalizedTargetAngle - normalizedCurrentRotRemainder);
-     if (totalTargetRotation <= currentRotation + 0.1) { 
-        totalTargetRotation += 2 * Math.PI;
-    }
-    
-    targetRotationRef.current = totalTargetRotation;
-    spinStartRotationRef.current = currentRotation;
-    spinStartTimeRef.current = performance.now();
-
-    const animate = (timestamp: number) => {
-      const elapsed = timestamp - spinStartTimeRef.current;
-      if (elapsed >= spinDuration) {
-        const finalRotation = targetRotationRef.current;
-        setCurrentRotation(finalRotation);
-        animationFrameIdRef.current = null;
-
-        const winnerIdOrName = names[winnerIndexRef.current]; 
-        const winnerImageAsset = imageStore[winnerIdOrName];
-        const winnerDisplayName = winnerImageAsset?.fileName || winnerIdOrName; 
-        const trimmedWinnerDisplayName = winnerDisplayName ? winnerDisplayName.trim() : "";
-
-        if (trimmedWinnerDisplayName.length > 0 || winnerImageAsset) { 
-            setSelectedName(trimmedWinnerDisplayName); 
-            setSelectedItem(winnerIdOrName); 
-            
-            const winnerDetails: WinnerDetails = {
-              id: winnerIdOrName,
-              displayName: trimmedWinnerDisplayName,
-              isImage: !!winnerImageAsset,
-              imageDataURL: winnerImageAsset?.dataURL,
-            };
-
-            if (useGiftList && currentGiftToAward) {
-              setCurrentGiftForModal({ title: currentGiftToAward.title, name: currentGiftToAward.giftName });
-              setWinnerHistory(prevHistory => [
-                ...prevHistory, 
-                { 
-                  type: 'gift',
-                  giftTitle: currentGiftToAward.title,
-                  giftAwardedName: currentGiftToAward.giftName,
-                  winner: winnerDetails,
-                  timestamp: Date.now()
-                }
-              ]);
-              setGiftList(prevGifts => prevGifts.map(gift => 
-                gift.id === currentGiftToAward!.id 
-                ? { ...gift, quantity: gift.quantity - 1 }
-                : gift
-              ));
-            } else {
-              setWinnerHistory(prevHistory => [
-                ...prevHistory, 
-                {
-                  type: 'standard',
-                  winner: winnerDetails,
-                  timestamp: Date.now()
-                }
-              ]);
-            }
-            setShowWinnerModal(true);
-            setShowConfetti(true);
-            if (winSoundRef.current) {
-              winSoundRef.current.currentTime = 0; // Rewind if playing again quickly
-              winSoundRef.current.play().catch(error => {
-                console.warn("Không thể phát âm thanh chiến thắng:", error);
-                addNotification("Không thể phát âm thanh. Trình duyệt có thể đã chặn tự động phát.", "info", 5000);
-              });
-            }
-        } else {
-            addNotification("Vòng quay dừng lại ở một mục không hợp lệ hoặc trống.", 'error');
-            setSelectedName(null);
-            setSelectedItem(null);
-        }
-        
-        if (autoShuffle) {
-          setSpinJustCompletedWithAutoShuffle(true);
-        }
-        
-        setIsSpinning(false);
-        return;
+      const participantProb = effectiveProbabilities[i];
+      const segmentAngleSpanForThis = participantProb.probability * 2 * Math.PI;
+      if (names[winnerIndexRef.current] === participantProb.nameOrId) {
+        winnerSegmentStartAngle = cumulativeAngle;
+        winnerSegmentAngleSpan = segmentAngleSpanForThis;
+        break;
       }
-
-      const newRotation = easeOutQuart(
-        elapsed,
-        spinStartRotationRef.current,
-        targetRotationRef.current - spinStartRotationRef.current,
-        spinDuration
-      );
-      setCurrentRotation(newRotation);
-      animationFrameIdRef.current = requestAnimationFrame(animate);
-    };
-
-    animationFrameIdRef.current = requestAnimationFrame(animate);
-  }, [names, isSpinning, currentRotation, spinDuration, parsedPriorityNames, imageStore, autoShuffle, useGiftList, giftList, handleNamesUpdate, boostedParticipants, addNotification]);
-
-
-  useEffect(() => {
-    if (spinJustCompletedWithAutoShuffle && !isSpinning) { 
-      const shuffledNames = shuffleArray([...names]);
-      handleNamesUpdate(shuffledNames);
-      setSpinJustCompletedWithAutoShuffle(false);
+      cumulativeAngle += segmentAngleSpanForThis;
     }
-  }, [spinJustCompletedWithAutoShuffle, names, handleNamesUpdate, isSpinning]);
+
+    const staticPointerAngle = -Math.PI / 2; 
+    const randomOffsetFactor = (Math.random() * 0.7) + 0.15; 
+    const targetAngleOnWheel = winnerSegmentStartAngle + winnerSegmentAngleSpan * randomOffsetFactor;
+    
+    let finalTargetNormalizedRotation = (staticPointerAngle - targetAngleOnWheel);
+    finalTargetNormalizedRotation = (finalTargetNormalizedRotation % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+
+    const spinStartActual = currentRotation;
+    const deltaRotationFromVelocity = (DESIRED_INITIAL_ANGULAR_VELOCITY_RAD_PER_MS * spinDuration) / 4;
+    const minDeltaRotationFromSpins = ABSOLUTE_MIN_TOTAL_SPINS * 2 * Math.PI;
+    const requiredDeltaRotation = Math.max(deltaRotationFromVelocity, minDeltaRotationFromSpins);
+
+    let provisionalTargetRotation = spinStartActual + requiredDeltaRotation;
+    let provisionalEndNormalized = (provisionalTargetRotation % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+    let angleAdjustment = (finalTargetNormalizedRotation - provisionalEndNormalized + 2 * Math.PI) % (2 * Math.PI);
+    let finalCalculatedTargetRotation = provisionalTargetRotation + angleAdjustment;
+
+    while (finalCalculatedTargetRotation < spinStartActual + requiredDeltaRotation - (Math.PI * 0.5) || 
+           (requiredDeltaRotation > 0.1 && finalCalculatedTargetRotation <= spinStartActual + 0.1) ) { 
+      finalCalculatedTargetRotation += 2 * Math.PI;
+    }
+    
+    targetRotationRef.current = finalCalculatedTargetRotation;
+    spinStartRotationRef.current = spinStartActual;
+    spinStartTimeRef.current = 0; 
+
+    animationFrameIdRef.current = requestAnimationFrame(animateSpin);
+  }, [names, isSpinning, currentRotation, spinDuration, parsedPriorityNames, imageStore, useGiftList, giftList, boostedParticipants, showBoostWinRateSectionInTab, addNotification, animateSpin, activeTickSoundElement, activeSoundIsContinuous, tickSoundVolume]);
 
 
   useEffect(() => {
@@ -474,6 +708,9 @@ const App: React.FC = () => {
     return () => {
       if (confettiTimerRef.current) {
         clearTimeout(confettiTimerRef.current);
+      }
+      if (audioFadeIntervalRef.current) { 
+        clearInterval(audioFadeIntervalRef.current);
       }
     };
   }, [showWinnerModal, showConfetti]);
@@ -512,8 +749,57 @@ const App: React.FC = () => {
 
   const handleCloseWinnerModal = useCallback(() => {
     setShowWinnerModal(false);
-    setCurrentGiftForModal(null);
-  }, []);
+    let finalNamesList = [...names]; 
+    let performedNameListUpdate = false;
+
+    if (autoRemoveWinner && pendingWinnerForAutoRemoval) {
+      const winnerToRemove = pendingWinnerForAutoRemoval;
+      finalNamesList = names.filter(item => item !== winnerToRemove.id);
+      performedNameListUpdate = true;
+      
+      const winnerDisplayNameNormalized = winnerToRemove.displayName.trim().toLowerCase();
+      const currentPriorityList = priorityNamesInput
+        .split(/[\n,]+/)
+        .map(name => name.trim())
+        .filter(name => name.length > 0);
+      const newPriorityList = currentPriorityList.filter(
+        name => name.trim().toLowerCase() !== winnerDisplayNameNormalized
+      );
+      setPriorityNamesInput(newPriorityList.join('\n'));
+
+      setBoostedParticipants(prevBoosted =>
+        prevBoosted.filter(
+          p => p.name.trim().toLowerCase() !== winnerDisplayNameNormalized
+        )
+      );
+      
+      addNotification(`Đã tự động xóa "${winnerToRemove.displayName}" khỏi tất cả danh sách.`, 'info', 4000);
+      setPendingWinnerForAutoRemoval(null);
+    }
+
+    if (autoShuffle) {
+      if (finalNamesList.length > 0) {
+        finalNamesList = shuffleArray(finalNamesList);
+        performedNameListUpdate = true;
+        if (!(autoRemoveWinner && pendingWinnerForAutoRemoval)) { 
+            addNotification("Đã tự động trộn danh sách.", "info", 3000);
+        }
+      }
+    }
+
+    if (performedNameListUpdate) {
+      handleNamesUpdate(finalNamesList);
+    }
+
+  }, [
+    names, 
+    autoRemoveWinner, 
+    pendingWinnerForAutoRemoval, 
+    priorityNamesInput, 
+    autoShuffle, 
+    handleNamesUpdate, 
+    addNotification
+  ]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -538,29 +824,39 @@ const App: React.FC = () => {
   }, [showWinnerModal, isImageModalOpen, handleCloseWinnerModal, showClearHistoryConfirmModal]);
 
 
-  const handleRemoveWinner = () => {
+  const handleRemoveWinner = () => { 
     if (selectedItem) { 
-      const updatedNames = names.filter(item => item !== selectedItem);
-      handleNamesUpdate(updatedNames); 
+      const updatedNamesArray = names.filter(item => item !== selectedItem);
+      handleNamesUpdate(updatedNamesArray); 
 
       if(selectedName) { 
+        const winnerDisplayNameNormalized = selectedName.trim().toLowerCase();
+        
         const currentPriorityList = priorityNamesInput
           .split(/[\n,]+/)
           .map(name => name.trim())
           .filter(name => name.length > 0);
-        
-        const newPriorityList = currentPriorityList.filter(name => name !== selectedName);
+        const newPriorityList = currentPriorityList.filter(
+          name => name.trim().toLowerCase() !== winnerDisplayNameNormalized
+        );
         setPriorityNamesInput(newPriorityList.join('\n'));
+
+        setBoostedParticipants(prevBoosted =>
+          prevBoosted.filter(
+            p => p.name.trim().toLowerCase() !== winnerDisplayNameNormalized
+          )
+        );
+        addNotification(`Đã xóa "${selectedName}" khỏi các danh sách liên quan.`, 'info');
+      } else {
+         addNotification(`Đã xóa mục đã chọn khỏi danh sách quay.`, 'info');
       }
     }
     setShowWinnerModal(false);
-    setCurrentGiftForModal(null);
   };
   
   const confirmClearWinnerHistory = () => {
     setWinnerHistory([]);
     addNotification("Đã xóa lịch sử kết quả.", 'info');
-    // setShowClearHistoryConfirmModal(false); // Modal closes itself on confirm
   };
 
   const handleImageSelected = (src: string) => {
@@ -593,6 +889,15 @@ const App: React.FC = () => {
         addNotification("Đã xóa màu nền tùy chỉnh của vòng quay.", 'info');
     }
   };
+
+  const handleWheelTextColorChange = (newColor: string) => {
+    setWheelTextColor(newColor);
+    if (newColor === DEFAULT_WHEEL_TEXT_COLOR) {
+        addNotification("Đã đặt lại màu chữ vòng quay về mặc định.", 'info');
+    } else {
+        addNotification("Đã cập nhật màu chữ vòng quay.", 'success');
+    }
+  };
   
   const handleAppGlobalBackgroundChange = (newBackground: AppGlobalBackground) => {
     setAppGlobalBackground(newBackground);
@@ -603,6 +908,64 @@ const App: React.FC = () => {
     }
   };
 
+  const handleTitleTextChange = (newText: string) => {
+    setTitleText(newText);
+    if (newText === DEFAULT_TITLE_TEXT) {
+      addNotification("Đã khôi phục nội dung tiêu đề mặc định.", "info");
+    } else {
+      addNotification("Đã cập nhật nội dung tiêu đề.", "success");
+    }
+  };
+
+  const handleTitleColorChange = (newColorConfig: AppGlobalBackground) => {
+    setTitleColorConfig(newColorConfig);
+    if (newColorConfig === null) {
+      addNotification("Đã khôi phục màu tiêu đề mặc định.", "info");
+    } else {
+      addNotification("Đã cập nhật màu tiêu đề.", "success");
+    }
+  };
+
+  useLayoutEffect(() => {
+    const sliderElement = spinDurationSliderRef.current;
+    if (!sliderElement) {
+      setSliderThumbPositionStyle({ left: '0%' });
+      setShowSpinDurationTooltip(false); 
+      return;
+    }
+
+    const inputWidth = sliderElement.offsetWidth;
+
+    if (inputWidth === 0) {
+       setShowSpinDurationTooltip(false); 
+      return;
+    }
+    
+    const thumbWidthEstimate = parseFloat(getComputedStyle(sliderElement).getPropertyValue('--slider-thumb-size')) || 16;
+
+    const val = spinDuration / 1000; // current value in seconds
+    const min = parseFloat(sliderElement.min);
+    const max = parseFloat(sliderElement.max);
+    const valueRange = max - min;
+
+    let valuePercentDecimal = 0;
+    if (valueRange > 0) {
+      valuePercentDecimal = (val - min) / valueRange;
+    } else if (val >= max) { // Handles cases where min might equal max (slider is effectively a single point)
+      valuePercentDecimal = 1;
+    }
+    valuePercentDecimal = Math.max(0, Math.min(1, valuePercentDecimal)); // Clamp between 0 and 1
+    
+    sliderElement.style.setProperty('--value-percent', `${valuePercentDecimal * 100}%`);
+
+    const thumbLeftEdgePx = valuePercentDecimal * (inputWidth - thumbWidthEstimate);
+    const thumbCenterPx = thumbLeftEdgePx + (thumbWidthEstimate / 2);
+    
+    let leftPercentage = (thumbCenterPx / inputWidth) * 100;
+    leftPercentage = Math.max(0, Math.min(100, leftPercentage)); 
+
+    setSliderThumbPositionStyle({ left: `${leftPercentage}%` });
+  }, [spinDuration, wheelAreaDimension, showSpinDurationTooltip, isSpinDurationLocked, selectedTickSoundUrl, customSoundDurationSeconds]); 
 
   const ConfettiPiece: React.FC<{id: number}> = ({id}) => {
     const style = {
@@ -616,8 +979,6 @@ const App: React.FC = () => {
     };
     return <div key={id} className="absolute opacity-0 animate-fall rounded-sm" style={style}></div>;
   };
-
-  const spinDurationsOptions = [5, 10, 15];
 
   const openImageModal = (purpose: 'centerLogo' | 'wheelBackground') => {
     setImageSelectionPurpose(purpose);
@@ -803,7 +1164,8 @@ const App: React.FC = () => {
     isOpen: boolean, 
     setIsOpen: (open: boolean) => void, 
     contentId: string, 
-    children: React.ReactNode
+    children: React.ReactNode,
+    isTabbed: boolean = false 
   ) => {
     return (
       <div className="w-full bg-slate-800 rounded-xl shadow-xl">
@@ -819,13 +1181,60 @@ const App: React.FC = () => {
           </span>
         </button>
         {isOpen && (
-          <div id={contentId} className="p-4 border-t border-slate-700">
+          <div id={contentId} className={`border-t border-slate-700 ${isTabbed ? '' : 'p-4'}`}>
             {children}
           </div>
         )}
       </div>
     );
   };
+  
+  const titleLines = titleText.split('\n');
+  const mainTitle = titleLines[0] || "";
+  const subTitle = titleLines.length > 1 ? titleLines.slice(1).join('\n') : "";
+
+
+  // For Spin Duration Slider Labels
+  const sliderMinVal = 5;
+  const sliderMaxVal = (selectedTickSoundUrl === CUSTOM_SOUND_URL_PLACEHOLDER && customSoundDurationSeconds !== null)
+      ? Math.floor(customSoundDurationSeconds)
+      : (isSpinDurationLocked ? spinDuration / 1000 : 60);
+
+  const calculateLeftPercent = (val: number, min: number, max: number): string => {
+    if (max === min) return '50%'; // Avoid division by zero, center if range is zero
+    const percentage = ((val - min) / (max - min)) * 100;
+    return `${Math.max(0, Math.min(100, percentage))}%`;
+  };
+
+  const durationLabels: { value: number; text: string }[] = [];
+  durationLabels.push({ value: sliderMinVal, text: `${sliderMinVal}s`});
+
+  const p2Value = (selectedTickSoundUrl === CUSTOM_SOUND_URL_PLACEHOLDER && customSoundDurationSeconds !== null) 
+      ? Math.round(sliderMinVal + (sliderMaxVal - sliderMinVal) / 3) // Approx 1/3 of range
+      : 20;
+  if (p2Value > sliderMinVal && p2Value < sliderMaxVal) {
+      durationLabels.push({ value: p2Value, text: `${p2Value}s`});
+  }
+  
+  const p3Value = (selectedTickSoundUrl === CUSTOM_SOUND_URL_PLACEHOLDER && customSoundDurationSeconds !== null)
+      ? Math.round(sliderMinVal + (sliderMaxVal - sliderMinVal) * 2 / 3) // Approx 2/3 of range
+      : 40;
+  if (p3Value > sliderMinVal && p3Value < sliderMaxVal && (!durationLabels.some(l => l.value === p3Value) || p3Value > p2Value) ) {
+      // Ensure it's distinct and greater than p2 if p2 exists
+      if (durationLabels.some(l => l.value === p2Value) && p3Value <= p2Value) {
+          // If p2 exists and p3 is not greater, skip or adjust p3. For now, skipping.
+      } else {
+        durationLabels.push({ value: p3Value, text: `${p3Value}s`});
+      }
+  }
+  
+  if (sliderMaxVal > sliderMinVal && !durationLabels.some(l=>l.value === sliderMaxVal)) {
+      durationLabels.push({ value: sliderMaxVal, text: `${sliderMaxVal}s`});
+  }
+  // Remove duplicates by value and sort
+  const uniqueDurationLabels = durationLabels
+    .sort((a, b) => a.value - b.value)
+    .filter((point, index, self) => index === self.findIndex(p => p.value === point.value));
 
 
   return (
@@ -840,11 +1249,6 @@ const App: React.FC = () => {
         }
         .animate-fall { animation-name: fall; animation-timing-function: ease-out; }
         
-        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #ec4899; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #db2777; }
-
         .winner-history-list::-webkit-scrollbar { width: 6px; }
         .winner-history-list::-webkit-scrollbar-track { background: #334155; border-radius: 8px; }
         .winner-history-list::-webkit-scrollbar-thumb { background: #7c3aed; border-radius: 8px; }
@@ -856,10 +1260,47 @@ const App: React.FC = () => {
           className="text-5xl font-extrabold tracking-tight sm:text-6xl md:text-7xl"
           style={{ lineHeight: 'normal' }} 
         >
-          <span className="block text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-red-500 to-yellow-500">
-            Vòng Quay May Mắn
-          </span>
-          <span className="block text-purple-400 text-3xl mt-1">Phiên Bản Đặc Biệt</span>
+          {(() => {
+            const renderStyledLine = (text: string, isSub: boolean) => {
+              if (!text.trim() && isSub) return null; 
+
+              if (titleColorConfig === null) { 
+                return isSub ? (
+                  <span className="block text-purple-400 text-3xl mt-1">{text}</span>
+                ) : (
+                  <span className="block text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-red-500 to-yellow-500">{text}</span>
+                );
+              } else { 
+                let style: React.CSSProperties = {};
+                let baseClassName = "block";
+                if (isSub) baseClassName += " text-3xl mt-1"; 
+
+                if (typeof titleColorConfig === 'string') { 
+                  style.color = titleColorConfig;
+                } else { 
+                  const sortedStops = [...titleColorConfig.stops].sort((a, b) => a.position - b.position);
+                  const stopsString = sortedStops.map(s => `${s.color} ${s.position}%`).join(', ');
+                  
+                  if (titleColorConfig.type === 'linear-gradient') {
+                    style.backgroundImage = `linear-gradient(${titleColorConfig.angle}deg, ${stopsString})`;
+                  } else { 
+                    style.backgroundImage = `radial-gradient(${titleColorConfig.shape} at ${titleColorConfig.position}, ${stopsString})`;
+                  }
+                  baseClassName += " text-transparent bg-clip-text";
+                  style.WebkitBackgroundClip = 'text'; 
+                  style.backgroundClip = 'text';
+                }
+                return <span className={baseClassName} style={style}>{text}</span>;
+              }
+            };
+
+            return (
+              <>
+                {renderStyledLine(mainTitle, false)}
+                {subTitle && renderStyledLine(subTitle, true)}
+              </>
+            );
+          })()}
         </h1>
       </header>
 
@@ -872,13 +1313,16 @@ const App: React.FC = () => {
           <WheelCanvas
             names={names}
             imageStore={imageStore}
-            boostedParticipants={boostedParticipants}
+            boostedParticipants={showBoostWinRateSectionInTab ? boostedParticipants : []} // Pass boosted only if section is active
             rotationAngle={currentRotation}
             canvasSize={wheelAreaDimension * 0.9} 
             centerImageSrc={centerImageSrc}
             wheelBackgroundImageSrc={wheelBackgroundImageSrc}
-            dynamicBackgroundColor={wheelDynamicBackground} 
+            dynamicBackgroundColor={wheelDynamicBackground}
+            wheelTextColor={wheelTextColor} 
             onWheelClick={spinWheel}
+            tickSound={activeSoundIsContinuous ? null : activeTickSoundElement} 
+            isTickSoundContinuous={activeSoundIsContinuous} 
           />
         </div>
 
@@ -947,77 +1391,197 @@ const App: React.FC = () => {
           )}
           
           {renderCollapsibleSection("Tùy Chọn Quay", isSpinOptionsOpen, setIsSpinOptionsOpen, "spinOptionsContent", (
-            <div className="space-y-4">
-              <div className="flex justify-around items-center mb-3">
-                {spinDurationsOptions.map((sec) => {
-                  const durationValue = sec * 1000;
-                  const inputId = `duration-${sec}s`;
+            <>
+              <div className="w-full grid grid-cols-3 border-b border-slate-700 mb-0">
+                {(['beforeSpin', 'duringSpin', 'afterSpin'] as SpinOptionTab[]).map(tab => {
+                    let tabLabel = '';
+                    if (tab === 'beforeSpin') tabLabel = 'Trước khi quay';
+                    else if (tab === 'duringSpin') tabLabel = 'Trong khi quay';
+                    else if (tab === 'afterSpin') tabLabel = 'Sau khi quay';
                   return (
-                    <label
-                      key={sec}
-                      htmlFor={inputId}
-                      className={`flex items-center space-x-2 text-slate-300 cursor-pointer p-2 rounded-md hover:bg-slate-700 transition-colors ${isSpinning ? 'opacity-60 cursor-not-allowed' : ''} ${spinDuration === durationValue ? 'bg-slate-700/70 ring-2 ring-pink-500' : ''}`}
+                    <button
+                      key={tab}
+                      onClick={() => setActiveSpinOptionTab(tab)}
+                      aria-pressed={activeSpinOptionTab === tab}
+                      className={`w-full py-2.5 px-3 text-sm font-medium text-center transition-colors duration-150 ease-in-out focus:outline-none focus:ring-1 focus:ring-pink-400 
+                        ${isSpinning ? 'cursor-not-allowed' : ''}
+                        ${ activeSpinOptionTab === tab 
+                            ? 'bg-slate-700/70 text-pink-400 border-b-2 border-pink-500' 
+                            : 'bg-transparent text-slate-400 hover:text-pink-300 hover:bg-slate-700/30'
+                        }`}
+                      disabled={isSpinning}
                     >
-                      <input
-                        type="radio"
-                        name="spinDuration"
-                        value={durationValue}
-                        id={inputId}
-                        checked={spinDuration === durationValue}
-                        onChange={(e) => !isSpinning && setSpinDuration(parseInt(e.target.value))}
-                        disabled={isSpinning}
-                        className="sr-only peer"
-                        aria-label={`Thời gian quay ${sec} giây`}
-                      />
-                      <span className="w-5 h-5 border-2 border-slate-500 rounded-full flex items-center justify-center peer-checked:border-pink-500 transition-all duration-150">
-                        <span className="w-2.5 h-2.5 bg-pink-500 rounded-full opacity-0 peer-checked:opacity-100 transition-opacity duration-150"></span>
-                      </span>
-                      <span>{sec} giây</span>
-                    </label>
+                      {tabLabel}
+                    </button>
                   );
                 })}
               </div>
-              <label htmlFor="autoShuffleCheckbox" className="flex items-center justify-center space-x-2 text-slate-300 cursor-pointer p-2 rounded-md hover:bg-slate-700 transition-colors">
-                <input
-                  type="checkbox"
-                  id="autoShuffleCheckbox"
-                  checked={autoShuffle}
-                  onChange={(e) => setAutoShuffle(e.target.checked)}
-                  disabled={isSpinning}
-                  className="form-checkbox h-5 w-5 text-pink-600 bg-slate-700 border-slate-500 rounded focus:ring-pink-500 focus:ring-offset-slate-800 disabled:opacity-60"
-                />
-                <span>Tự động trộn danh sách sau mỗi lần quay</span>
-              </label>
-              <label htmlFor="useGiftListCheckbox" className="flex items-center justify-center space-x-2 text-slate-300 cursor-pointer p-2 rounded-md hover:bg-slate-700 transition-colors">
-                <input
-                  type="checkbox"
-                  id="useGiftListCheckbox"
-                  checked={useGiftList}
-                  onChange={(e) => setUseGiftList(e.target.checked)}
-                  disabled={isSpinning}
-                  className="form-checkbox h-5 w-5 text-pink-600 bg-slate-700 border-slate-500 rounded focus:ring-pink-500 focus:ring-offset-slate-800 disabled:opacity-60"
-                />
-                <span>Nhập danh sách quà</span>
-              </label>
-              {useGiftList && (
-                <GiftManagement
-                  giftList={giftList}
-                  setGiftList={setGiftList}
-                  isSpinning={isSpinning}
-                />
-              )}
-            </div>
-          ))}
+              <div className="p-4 space-y-4">
+                {activeSpinOptionTab === 'beforeSpin' && (
+                  <>
+                    <label htmlFor="useGiftListCheckbox" className="flex items-center justify-start space-x-2 text-slate-300 cursor-pointer p-2 rounded-md hover:bg-slate-700/50 transition-colors">
+                      <input
+                        type="checkbox"
+                        id="useGiftListCheckbox"
+                        checked={useGiftList}
+                        onChange={(e) => setUseGiftList(e.target.checked)}
+                        disabled={isSpinning}
+                        className="form-checkbox h-5 w-5 text-pink-600 bg-slate-700 border-slate-500 rounded focus:ring-pink-500 focus:ring-offset-slate-800 disabled:opacity-60"
+                      />
+                      <span>Nhập danh sách quà</span>
+                    </label>
+                    {useGiftList && (
+                      <GiftManagement
+                        giftList={giftList}
+                        setGiftList={setGiftList}
+                        isSpinning={isSpinning}
+                      />
+                    )}
 
-          {renderCollapsibleSection("Tăng tỉ lệ thắng", isBoostWinRateOpen, setIsBoostWinRateOpen, "boostWinRateContent", (
-            <BoostWinRateInput
-              boostedParticipants={boostedParticipants}
-              setBoostedParticipants={setBoostedParticipants}
-              isSpinning={isSpinning}
-              namesOnWheel={names}
-              imageStore={imageStore}
-            />
-          ))}
+                    <label htmlFor="showBoostWinRateCheckbox" className="flex items-center justify-start space-x-2 text-slate-300 cursor-pointer p-2 rounded-md hover:bg-slate-700/50 transition-colors mt-4">
+                      <input
+                        type="checkbox"
+                        id="showBoostWinRateCheckbox"
+                        checked={showBoostWinRateSectionInTab}
+                        onChange={(e) => setShowBoostWinRateSectionInTab(e.target.checked)}
+                        disabled={isSpinning}
+                        className="form-checkbox h-5 w-5 text-pink-600 bg-slate-700 border-slate-500 rounded focus:ring-pink-500 focus:ring-offset-slate-800 disabled:opacity-60"
+                      />
+                      <span>Tăng tỉ lệ thắng</span>
+                    </label>
+
+                    {showBoostWinRateSectionInTab && (
+                      <div className="mt-2 p-3 border border-slate-600 rounded-lg bg-slate-800/40">
+                        <BoostWinRateInput
+                          boostedParticipants={boostedParticipants}
+                          setBoostedParticipants={setBoostedParticipants}
+                          isSpinning={isSpinning}
+                          namesOnWheel={names}
+                          imageStore={imageStore}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+                {activeSpinOptionTab === 'duringSpin' && (
+                  <>
+                    <div className="my-2"> 
+                      <label htmlFor="spinDurationSlider" className="block text-sm font-medium text-slate-300 mb-2 text-center">
+                        Thời gian quay (<span className="font-bold text-blue-400">{spinDuration / 1000}</span> giây)
+                        {isSpinDurationLocked && <span className="text-xs text-yellow-400"> (Bị khóa bởi âm thanh đặt trước)</span>}
+                        {selectedTickSoundUrl === CUSTOM_SOUND_URL_PLACEHOLDER && customSoundDurationSeconds &&
+                         <span className="text-xs text-green-400"> (Tối đa: {customSoundDurationSeconds.toFixed(1)}s do âm thanh tùy chỉnh)</span>}
+                      </label>
+                      <div className="relative px-1 py-3">
+                        <input
+                          ref={spinDurationSliderRef}
+                          type="range"
+                          id="spinDurationSlider"
+                          min="5" // Min spin duration
+                          max={sliderMaxVal} // Use calculated sliderMaxVal for consistency
+                          value={spinDuration / 1000}
+                          onChange={(e) => {
+                            if (isSpinning) return;
+                            const newSpinDurationSeconds = parseInt(e.target.value, 10);
+
+                            if (isSpinDurationLocked) { // Locked by predefined sound
+                                const lockedDuration = AVAILABLE_TICK_SOUNDS.find(s => s.url === selectedTickSoundUrl)?.fixedDuration;
+                                if (lockedDuration) {
+                                    addNotification(`Thời gian quay được cố định bởi âm thanh "${AVAILABLE_TICK_SOUNDS.find(s => s.url === selectedTickSoundUrl)?.name}" (${lockedDuration}s).`, 'info');
+                                }
+                                return;
+                            }
+
+                            if (selectedTickSoundUrl === CUSTOM_SOUND_URL_PLACEHOLDER && customSoundDurationSeconds !== null) {
+                                if (newSpinDurationSeconds > customSoundDurationSeconds) {
+                                    addNotification(`Thời gian quay tối đa cho âm thanh này là ${customSoundDurationSeconds.toFixed(1)} giây.`, 'error');
+                                    setSpinDuration(Math.round(customSoundDurationSeconds * 1000)); // Clamp
+                                    return;
+                                }
+                            }
+                            setSpinDuration(newSpinDurationSeconds * 1000);
+                          }}
+                          onMouseEnter={() => setShowSpinDurationTooltip(true)}
+                          onMouseLeave={() => setShowSpinDurationTooltip(false)}
+                          disabled={isSpinning || isSpinDurationLocked} // Only disabled if spinning or hard-locked by predefined sound
+                          className="w-full h-auto bg-transparent appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none"
+                          aria-label="Điều chỉnh thời gian quay vòng"
+                        />
+                        <div
+                          className={`slider-tooltip ${showSpinDurationTooltip ? 'visible' : ''}`}
+                          style={sliderThumbPositionStyle}
+                          aria-hidden="true"
+                        >
+                          {spinDuration / 1000}s
+                        </div>
+                      </div>
+                      <div className="relative h-4 text-xs text-slate-400 mt-0.5 px-1">
+                        {uniqueDurationLabels.map(label => {
+                            const leftPos = calculateLeftPercent(label.value, sliderMinVal, sliderMaxVal);
+                            let transform = 'translateX(-50%)';
+                            if (label.value === sliderMinVal && parseFloat(leftPos) < 5) transform = 'translateX(0%)'; // Align left edge if at start
+                            if (label.value === sliderMaxVal && parseFloat(leftPos) > 95) transform = 'translateX(-100%)'; // Align right edge if at end
+                            
+                            // Special handling for min and max to prevent transform if they are exactly 0% or 100%
+                            if (label.value === sliderMinVal && leftPos === "0%") transform = 'none';
+                            if (label.value === sliderMaxVal && leftPos === "100%") transform = 'translateX(-100%)';
+
+
+                            return (
+                                <span 
+                                    key={`label-${label.value}`} 
+                                    style={{ position: 'absolute', left: leftPos, transform: transform }}
+                                    className="whitespace-nowrap"
+                                >
+                                    {label.text}
+                                </span>
+                            );
+                        })}
+                      </div>
+                    </div>
+
+                    <TickSoundSelector
+                      availableSounds={AVAILABLE_TICK_SOUNDS}
+                      currentSoundUrl={selectedTickSoundUrl}
+                      customSoundName={customSoundName}
+                      customSoundDataUrl={customSoundDataUrl}
+                      onSoundConfigChange={handleSoundConfigChange}
+                      isSpinning={isSpinning}
+                      tickVolume={tickSoundVolume}
+                      onTickVolumeChange={setTickSoundVolume}
+                    />
+                  </>
+                )}
+                {activeSpinOptionTab === 'afterSpin' && (
+                  <div className="space-y-3">
+                    <label htmlFor="autoShuffleCheckbox" className="flex items-center justify-start space-x-2 text-slate-300 cursor-pointer p-2 rounded-md hover:bg-slate-700/50 transition-colors">
+                      <input
+                        type="checkbox"
+                        id="autoShuffleCheckbox"
+                        checked={autoShuffle}
+                        onChange={(e) => setAutoShuffle(e.target.checked)}
+                        disabled={isSpinning}
+                        className="form-checkbox h-5 w-5 text-pink-600 bg-slate-700 border-slate-500 rounded focus:ring-pink-500 focus:ring-offset-slate-800 disabled:opacity-60"
+                      />
+                      <span>Tự động trộn danh sách sau mỗi lần quay</span>
+                    </label>
+                    <label htmlFor="autoRemoveWinnerCheckbox" className="flex items-center justify-start space-x-2 text-slate-300 cursor-pointer p-2 rounded-md hover:bg-slate-700/50 transition-colors">
+                      <input
+                        type="checkbox"
+                        id="autoRemoveWinnerCheckbox"
+                        checked={autoRemoveWinner}
+                        onChange={(e) => setAutoRemoveWinner(e.target.checked)}
+                        disabled={isSpinning}
+                        className="form-checkbox h-5 w-5 text-pink-600 bg-slate-700 border-slate-500 rounded focus:ring-pink-500 focus:ring-offset-slate-800 disabled:opacity-60"
+                      />
+                      <span>Tự xóa người trúng sau mỗi lần quay</span>
+                    </label>
+                    {autoRemoveWinner && <p className="text-xs text-yellow-400/90 text-center mt-0.5 px-2">Người thắng sẽ bị xóa khỏi danh sách quay, danh sách ưu tiên và danh sách tăng tỉ lệ.</p>}
+                  </div>
+                )}
+              </div>
+            </>
+          ), true)} 
           
           {renderCollapsibleSection("Tùy Chỉnh Vòng Quay", isWheelCustomizationOpen, setIsWheelCustomizationOpen, "wheelCustomizationContent", (
             <div className="space-y-3">
@@ -1064,15 +1628,41 @@ const App: React.FC = () => {
                     isSpinning={isSpinning}
                   />
                </div>
+               <div className="pt-3 border-t border-slate-700/50">
+                <WheelTextColorPicker
+                  currentTextColor={wheelTextColor}
+                  onTextColorChange={handleWheelTextColorChange}
+                  defaultTextColor={DEFAULT_WHEEL_TEXT_COLOR}
+                  isSpinning={isSpinning}
+                />
+               </div>
             </div>
           ))}
 
            {renderCollapsibleSection("🎨 Tùy Chỉnh Giao Diện Chung", isAppAppearanceOpen, setIsAppAppearanceOpen, "appAppearanceContent", (
-                <AppBackgroundColorPicker
-                    currentBackground={appGlobalBackground}
-                    onBackgroundChange={handleAppGlobalBackgroundChange}
-                    isSpinning={isSpinning}
+              <div className="space-y-6">
+                <TitleTextEditor
+                  currentTitleText={titleText}
+                  onTitleTextChange={handleTitleTextChange}
+                  defaultTitleText={DEFAULT_TITLE_TEXT}
+                  isSpinning={isSpinning}
                 />
+                <div className="pt-4 border-t border-slate-700/50">
+                  <TitleColorPicker
+                    currentTitleColor={titleColorConfig}
+                    onTitleColorChange={handleTitleColorChange}
+                    activeTitleText={titleText} 
+                    isSpinning={isSpinning}
+                  />
+                </div>
+                <div className="pt-4 border-t border-slate-700/50">
+                  <AppBackgroundColorPicker
+                      currentBackground={appGlobalBackground}
+                      onBackgroundChange={handleAppGlobalBackgroundChange}
+                      isSpinning={isSpinning}
+                  />
+                </div>
+              </div>
             ))}
 
 
@@ -1089,6 +1679,7 @@ const App: React.FC = () => {
         imageStore={imageStore}   
         onClose={handleCloseWinnerModal}
         onRemove={handleRemoveWinner}
+        autoRemoveWinnerActive={autoRemoveWinner} 
         giftDetails={currentGiftForModal}
       />
 

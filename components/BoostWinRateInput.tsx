@@ -39,6 +39,13 @@ const BoostWinRateInput: React.FC<BoostWinRateInputProps> = ({
       addNotification('Vui lòng nhập tên người tham gia.', 'error');
       return;
     }
+
+    // Check if the name exists on the wheel
+    if (!wheelDisplayNames.includes(nameTrimmed.toLowerCase())) {
+      addNotification(`"${nameTrimmed}" không có trong danh sách quay. Vui lòng kiểm tra lại tên.`, 'error');
+      return;
+    }
+
     if (isNaN(percentageNum) || percentageNum < 0) {
       addNotification('Tỉ lệ thắng phải là một số không âm.', 'error');
       setNewPercentage('');
