@@ -200,44 +200,19 @@ const NameInput: React.FC<NameInputProps> = ({
     const pastedText = event.clipboardData.getData('text/plain');
     const linesFromPaste = pastedText.split(/\r\n?|\n/);
 
-    // Filter out empty lines that result from multiple newlines,
-    // but keep lines that are just whitespace if we want to allow names like "  " (trim later).
-    // For consistency with triggerNamesUpdateFromDOM, we will trim and filter empty strings.
     const processedLines = linesFromPaste
-        .map(line => line.trim()) // Trim each line
-        .filter(line => line !== ''); // Remove lines that are empty after trimming
+        .map(line => line.trim())
+        .filter(line => line !== '');
 
     if (processedLines.length === 0 && pastedText.trim() !== '') {
         // If pastedText was not empty but processedLines is (e.g. pasted only whitespace),
         // we might want to add a single empty string if the app supports it,
         // or do nothing if empty entries are not desired from paste.
-        // For now, if all lines are empty after trim, it results in no new names.
     }
     
-    // Get current names that are not image IDs to merge with pasted text
-    const existingTextNames = currentNames.filter(nameOrId => !imageStore[nameOrId]);
-    const combinedNames = [...existingTextNames, ...processedLines];
-    
-    // Re-add image names, preserving their original order relative to each other if possible,
-    // but new text names will be appended after existing text names.
-    // A simpler approach: add all existing image IDs at the beginning or end of the new text list.
-    // For now, let's just replace currentNames with the new set derived from paste,
-    // effectively replacing all content. If selection-based pasting is desired, this needs more complex logic.
-
     isProgrammaticUpdateRef.current = true;
-    // The `onNamesChange` will trigger the useEffect to rebuild the DOM,
-    // including setting the cursor at the end.
-    // `currentNames` in App.tsx will become these `processedLines` (if it's a full replacement)
-    // Or, if appending: need to get current selection and merge.
-    // For simplicity of this fix, let's assume paste replaces all text content.
-    // To achieve this, we need to combine existing images with new text.
-    const imageNames = currentNames.filter(nameOrId => imageStore[nameOrId]);
-
-    // If the contentEditable was focused and had a selection, this simplistic replace might not be ideal.
-    // However, the original problem is about bulk pasting usually into an empty or fully selected area.
-    // Let's make pasted content replace current text items but keep existing images.
-    
-    const finalNames = [...imageNames, ...processedLines];
+    // Append new pasted lines to the existing full list of names
+    const finalNames = [...currentNames, ...processedLines];
     
     onNamesChange(finalNames);
     
