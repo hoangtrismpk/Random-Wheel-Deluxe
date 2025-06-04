@@ -180,7 +180,7 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
   const [loadedCenterImage, setLoadedCenterImage] = useState<HTMLImageElement | null>(null);
   const [loadedWheelBackgroundImage, setLoadedWheelBackgroundImage] = useState<HTMLImageElement | null>(null);
   const [loadedSegmentImages, setLoadedSegmentImages] = useState<Record<string, HTMLImageElement | 'error' | 'loading'>>({});
-  const [offscreenCanvasVersion, setOffscreenCanvasVersion] = useState(0); // New state
+  const [offscreenCanvasVersion, setOffscreenCanvasVersion] = useState(0); 
 
   const [isIdleAnimating, setIsIdleAnimating] = useState<boolean>(false);
   const [idleAnimationRotation, setIdleAnimationRotation] = useState<number>(0);
@@ -191,6 +191,16 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
   
   const lastTickPlayTimeRef = useRef<number>(0);
   const lastActualRotationForTickRef = useRef<number>(0);
+
+  const [forceRefreshKey, setForceRefreshKey] = useState(0);
+  const prevNamesLengthRef = useRef(names.length);
+
+  useEffect(() => {
+    if (prevNamesLengthRef.current === 0 && names.length > 0) {
+      setForceRefreshKey(k => k + 1);
+    }
+    prevNamesLengthRef.current = names.length;
+  }, [names.length]);
 
 
   useEffect(() => {
@@ -425,7 +435,7 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
 
 
     if (localSegmentDefs.length > 0 && (names.length > 0 || isIdleAnimating)) {
-      if (names.length > 0) { // Actual named segments
+      if (names.length > 0) { 
         if (loadedWheelBackgroundImage) {
           ctx.save();
           ctx.beginPath();
@@ -480,38 +490,42 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
             const imageAsset = imageStore[nameOrId];
             const loadedImageState = loadedSegmentImages[nameOrId];
 
-            if (imageAsset) { // It's an image entry
+            if (imageAsset) { 
               if (loadedImageState instanceof HTMLImageElement) {
                 drawSegmentImageInternal(ctx, loadedImageState, itemDisplayAngle, radius, canvasSize, segmentAngleSpan);
               } else if (loadedImageState === 'loading' || loadedImageState === undefined) {
                 drawSegmentTextInternal(ctx, "Đang tải ảnh...", itemDisplayAngle, segmentAngleSpan, radius, canvasSize, true, wheelTextColor);
-              } else { // Explicit 'error' state
+              } else { 
                 drawSegmentTextInternal(ctx, `Lỗi: ${imageAsset.fileName.substring(0,10)}...`, itemDisplayAngle, segmentAngleSpan, radius, canvasSize, true, wheelTextColor);
               }
-            } else { // It's a text name
+            } else { 
               drawSegmentTextInternal(ctx, nameOrId, itemDisplayAngle, segmentAngleSpan, radius, canvasSize, false, wheelTextColor);
             }
           }
           currentDrawingAngle = endAngle;
         });
-      } else { // Idle animation segments (names.length === 0 && isIdleAnimating)
-        for (let i = 0; i < IDLE_SEGMENT_COUNT; i++) {
-            const segmentColor = SEGMENT_COLORS[i % SEGMENT_COLORS.length];
-            const startAngle = localSegmentStartAngles[i];
-            const segmentAngleSpan = (localSegmentDefs[i]?.probability || 0) * 2 * Math.PI;
-            const endAngle = startAngle + segmentAngleSpan;
+      } else { 
+        // This is the idle animation drawing path
+        // Ensure localSegmentDefs for idle are used here
+        if (isIdleAnimating && localSegmentDefs.length === IDLE_SEGMENT_COUNT) {
+            localSegmentDefs.forEach((idleDef, i) => {
+                const segmentColor = SEGMENT_COLORS[i % SEGMENT_COLORS.length];
+                const startAngle = localSegmentStartAngles[i]; // Use pre-calculated start angles
+                const segmentAngleSpan = idleDef.probability * 2 * Math.PI;
+                const endAngle = startAngle + segmentAngleSpan;
 
-            if (segmentAngleSpan > 0) {
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.arc(0, 0, radius, startAngle, endAngle);
-            ctx.closePath();
-            ctx.fillStyle = segmentColor;
-            ctx.fill();
-            ctx.strokeStyle = BORDER_COLOR;
-            ctx.lineWidth = 2.5;
-            ctx.stroke();
-            }
+                if (segmentAngleSpan > 1e-9) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.arc(0, 0, radius, startAngle, endAngle);
+                    ctx.closePath();
+                    ctx.fillStyle = segmentColor;
+                    ctx.fill();
+                    ctx.strokeStyle = BORDER_COLOR;
+                    ctx.lineWidth = 2.5;
+                    ctx.stroke();
+                }
+            });
         }
       }
     } else { 
@@ -567,9 +581,13 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
 
     ctx.restore(); 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    setOffscreenCanvasVersion(v => v + 1); // Increment version after drawing
+    setOffscreenCanvasVersion(v => v + 1); 
 
-  }, [names, canvasSize, loadedCenterImage, imageStore, loadedSegmentImages, loadedWheelBackgroundImage, wheelBackgroundImageSrc, isIdleAnimating, boostedParticipants, dynamicBackgroundColor, wheelTextColor]);
+  }, [
+      names, canvasSize, loadedCenterImage, imageStore, loadedSegmentImages, 
+      loadedWheelBackgroundImage, wheelBackgroundImageSrc, isIdleAnimating, 
+      boostedParticipants, dynamicBackgroundColor, wheelTextColor, forceRefreshKey // Added forceRefreshKey
+    ]);
 
 
   useEffect(() => {
@@ -684,8 +702,8 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
       idleAnimationRotation, 
       tickSound, 
       isTickSoundContinuous, 
-      names.length, // Keep names.length for tick logic related to single segment
-      offscreenCanvasVersion // Add new dependency here
+      names.length, 
+      offscreenCanvasVersion,
     ]);
 
   const actuallyCanSpin = names.length > 0 && !isIdleAnimating;
@@ -704,3 +722,4 @@ const WheelCanvas: React.FC<WheelCanvasProps> = ({
 };
 
 export default WheelCanvas;
+

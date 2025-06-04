@@ -54,7 +54,6 @@ export const CUSTOM_SOUND_URL_PLACEHOLDER = "custom_sound_placeholder_url";
 
 const AVAILABLE_TICK_SOUNDS: SoundOption[] = [
   { name: "Âm kim loại", url: "https://irace.vn/wp-content/uploads/2025/06/am-thanh-quay-3.mp3" },
-  { name: "Âm gỗ", url: "https://irace.vn/wp-content/uploads/2025/05/am-thanh-quay-2.mp3" },
   { name: "Chiếc nón kỳ diệu", url: "https://irace.vn/wp-content/uploads/2025/06/chiec_non_ly_dieu.mp3", fixedDuration: 20, isContinuous: true },
   { name: "Tiếng Trống (8s)", url: "https://irace.vn/wp-content/uploads/2025/06/tieng-trong-8s.mp3", fixedDuration: 8, isContinuous: true },
   { name: "Tiếng trống (16s)", url: "https://irace.vn/wp-content/uploads/2025/06/tieng-trong-16s.mp3", fixedDuration: 16, isContinuous: true },
@@ -161,11 +160,9 @@ const App: React.FC = () => {
   const handleSoundConfigChange = useCallback((config: { url: string; dataUrl?: string; fileName?: string }) => {
     setSelectedTickSoundUrl(config.url);
     if (config.url === CUSTOM_SOUND_URL_PLACEHOLDER && config.dataUrl && config.fileName) {
-      setCustomSoundDataUrl(config.dataUrl); // Store data URL and name
+      setCustomSoundDataUrl(config.dataUrl); 
       setCustomSoundName(config.fileName);
-      // Duration and actual audio element creation will be handled by the useEffect below
     } else if (config.url !== CUSTOM_SOUND_URL_PLACEHOLDER) {
-      // If a predefined sound is selected, clear custom sound specifics
       setCustomSoundDataUrl(null);
       setCustomSoundName(null);
       setCustomSoundDurationSeconds(null);
@@ -180,7 +177,6 @@ const App: React.FC = () => {
     }
     if (activeTickSoundElement) {
         activeTickSoundElement.pause();
-        // Important: Remove event listeners to prevent memory leaks if new Audio objects are created
         activeTickSoundElement.onloadedmetadata = null;
         activeTickSoundElement.onerror = null;
         activeTickSoundElement.oncanplaythrough = null;
@@ -228,7 +224,7 @@ const App: React.FC = () => {
 
             setCustomSoundDurationSeconds(duration);
             setSpinDuration(Math.round(duration * 1000));
-            setIsSpinDurationLocked(false); // Custom sounds adjust max, don't hard-lock the slider
+            setIsSpinDurationLocked(false); 
 
             const newAudio = new Audio(customSoundDataUrl);
             newAudio.preload = "auto";
@@ -240,7 +236,7 @@ const App: React.FC = () => {
                 setActiveTickSoundElement(null);
             };
             setActiveTickSoundElement(newAudio);
-            setActiveSoundIsContinuous(true); // All custom sounds are treated as continuous
+            setActiveSoundIsContinuous(true); 
         };
         audioForDuration.onerror = () => {
             addNotification("Lỗi khi tải siêu dữ liệu cho âm thanh tùy chỉnh.", 'error', 5000);
@@ -250,9 +246,8 @@ const App: React.FC = () => {
             setSpinDuration(DEFAULT_SPIN_DURATION_MS);
             setActiveTickSoundElement(null);
         };
-        // Don't set activeTickSoundElement here directly, wait for onloadedmetadata
     } else {
-        setCustomSoundDurationSeconds(null); // Clear if not a custom sound
+        setCustomSoundDurationSeconds(null); 
         const soundOption = AVAILABLE_TICK_SOUNDS.find(s => s.url === selectedTickSoundUrl);
         if (soundOption) {
             soundSourceUrlForPredefined = soundOption.url;
@@ -264,15 +259,8 @@ const App: React.FC = () => {
             setSpinDuration(fixedDurationForPredefined * 1000);
             setIsSpinDurationLocked(true);
         } else {
-            // If no fixed duration, and it's not a custom sound being processed,
-            // ensure spin duration isn't locked from a previous fixed sound.
              if (selectedTickSoundUrl !== CUSTOM_SOUND_URL_PLACEHOLDER || !customSoundDataUrl) {
                 setIsSpinDurationLocked(false);
-                // Revert to default spin duration if no sound or non-fixed sound is chosen
-                // UNLESS a custom sound was just deselected (in which case, customSoundDurationSeconds would be null)
-                // This maintains user's slider choice if they switch between non-fixed sounds.
-                // If they deselect a custom sound, spin duration should revert or be user-adjustable.
-                // The current spinDuration state will persist unless explicitly changed.
             }
         }
         setActiveSoundIsContinuous(isContinuousForPredefined);
@@ -280,7 +268,12 @@ const App: React.FC = () => {
             const newAudio = new Audio(soundSourceUrlForPredefined);
             newAudio.preload = "auto";
             newAudio.volume = tickSoundVolume;
-            if (isContinuousForPredefined) newAudio.loop = true;
+            if (isContinuousForPredefined) {
+                newAudio.loop = true;
+            } else {
+                newAudio.loop = false; 
+                newAudio.load(); // Explicitly load discrete sounds
+            }
             newAudio.onerror = () => {
                 console.error(`Error loading sound from: ${soundSourceUrlForPredefined}`);
                 addNotification(<>Không thể tải âm thanh từ: <code className="text-xs bg-slate-700 p-0.5 rounded">{soundSourceUrlForPredefined}</code></>, 'error', 5000);
@@ -288,20 +281,17 @@ const App: React.FC = () => {
             };
             setActiveTickSoundElement(newAudio);
         } else {
-             setActiveTickSoundElement(null); // No sound selected or invalid predefined
+             setActiveTickSoundElement(null); 
         }
     }
     
     if (isProcessingCustomSound) {
-        // For custom sound, main audio element is set up in onloadedmetadata, so clear any stale one here.
-        // However, this might cause a flicker if the old activeTickSoundElement was playing.
-        // The initial pause should handle it.
-        setActiveTickSoundElement(null); // Ensure no old sound plays while custom is loading meta
-        setActiveSoundIsContinuous(true); // Assume custom will be continuous
+        setActiveTickSoundElement(null); 
+        setActiveSoundIsContinuous(true); 
     }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTickSoundUrl, customSoundDataUrl, tickSoundVolume, addNotification]); // customSoundName is implicitly handled via customSoundDataUrl
+  }, [selectedTickSoundUrl, customSoundDataUrl, tickSoundVolume, addNotification]); 
 
 
   useEffect(() => {
@@ -412,23 +402,15 @@ const App: React.FC = () => {
       animationFrameIdRef.current = null;
 
       if (activeTickSoundElement && activeSoundIsContinuous && !activeTickSoundElement.paused) {
-        // Clear any pre-existing fade interval, just in case
         if (audioFadeIntervalRef.current) {
             clearInterval(audioFadeIntervalRef.current);
             audioFadeIntervalRef.current = null;
         }
-
-        // Store the user-set volume to restore after stopping
         const userSetVolume = tickSoundVolume;
-
-        // Mute, pause, and reset the sound
-        activeTickSoundElement.volume = 0; // Mute immediately
+        activeTickSoundElement.volume = 0; 
         activeTickSoundElement.pause();
         activeTickSoundElement.currentTime = 0;
-        activeTickSoundElement.loop = false; // Prevent further looping (spinWheel will set it true again if needed)
-        
-        // Restore the volume property on the audio element to the user's setting
-        // This way, the element is ready for the next play command with the correct volume.
+        activeTickSoundElement.loop = false; 
         activeTickSoundElement.volume = userSetVolume;
       }
 
@@ -567,7 +549,7 @@ const App: React.FC = () => {
       }
     }
 
-    if (chosenWinnerIndex === -1 && boostedParticipants.length > 0 && showBoostWinRateSectionInTab) { // Check showBoostWinRateSectionInTab
+    if (chosenWinnerIndex === -1 && boostedParticipants.length > 0 && showBoostWinRateSectionInTab) { 
         const validBoostedOnWheel = boostedParticipants
         .map(bp => {
           const wheelItem = wheelItemsWithDetails.find(item => item.displayName === bp.name.trim().toLowerCase());
@@ -618,7 +600,7 @@ const App: React.FC = () => {
         .filter(bpOrNull => bpOrNull !== null && bpOrNull.percentage > 0 && bpOrNull.percentage < 100) as Array<BoostedParticipant & { originalIdOrName: string }>;
     
     const totalBoostedPercentageForSpin = validBoostedForSpin.reduce((sum, bp) => sum + bp.percentage, 0);
-    const isBoostConfigValidForSpin = totalBoostedPercentageForSpin > 0 && totalBoostedPercentageForSpin < 100 && validBoostedForSpin.length > 0 && showBoostWinRateSectionInTab; // Check showBoostWinRateSectionInTab
+    const isBoostConfigValidForSpin = totalBoostedPercentageForSpin > 0 && totalBoostedPercentageForSpin < 100 && validBoostedForSpin.length > 0 && showBoostWinRateSectionInTab; 
 
     if (isBoostConfigValidForSpin) {
         const remainingPercentage = 100 - totalBoostedPercentageForSpin;
@@ -724,10 +706,10 @@ const App: React.FC = () => {
         const verticalPadding = 40; 
         const minSize = 250;
 
-        if (window.innerWidth < 1024) { // Mobile
+        if (window.innerWidth < 1024) { 
             targetContainerWidth = window.innerWidth * 0.95;
             maxHeightConstraint = availableHeight * 0.70 - verticalPadding;
-        } else { // Desktop (window.innerWidth >= 1024)
+        } else { 
             targetContainerWidth = window.innerWidth * 0.55; 
             maxHeightConstraint = availableHeight * 0.80 - verticalPadding; 
         }
@@ -943,7 +925,7 @@ const App: React.FC = () => {
     
     const thumbWidthEstimate = parseFloat(getComputedStyle(sliderElement).getPropertyValue('--slider-thumb-size')) || 16;
 
-    const val = spinDuration / 1000; // current value in seconds
+    const val = spinDuration / 1000; 
     const min = parseFloat(sliderElement.min);
     const max = parseFloat(sliderElement.max);
     const valueRange = max - min;
@@ -951,10 +933,10 @@ const App: React.FC = () => {
     let valuePercentDecimal = 0;
     if (valueRange > 0) {
       valuePercentDecimal = (val - min) / valueRange;
-    } else if (val >= max) { // Handles cases where min might equal max (slider is effectively a single point)
+    } else if (val >= max) { 
       valuePercentDecimal = 1;
     }
-    valuePercentDecimal = Math.max(0, Math.min(1, valuePercentDecimal)); // Clamp between 0 and 1
+    valuePercentDecimal = Math.max(0, Math.min(1, valuePercentDecimal)); 
     
     sliderElement.style.setProperty('--value-percent', `${valuePercentDecimal * 100}%`);
 
@@ -1194,14 +1176,13 @@ const App: React.FC = () => {
   const subTitle = titleLines.length > 1 ? titleLines.slice(1).join('\n') : "";
 
 
-  // For Spin Duration Slider Labels
   const sliderMinVal = 5;
   const sliderMaxVal = (selectedTickSoundUrl === CUSTOM_SOUND_URL_PLACEHOLDER && customSoundDurationSeconds !== null)
       ? Math.floor(customSoundDurationSeconds)
       : (isSpinDurationLocked ? spinDuration / 1000 : 60);
 
   const calculateLeftPercent = (val: number, min: number, max: number): string => {
-    if (max === min) return '50%'; // Avoid division by zero, center if range is zero
+    if (max === min) return '50%'; 
     const percentage = ((val - min) / (max - min)) * 100;
     return `${Math.max(0, Math.min(100, percentage))}%`;
   };
@@ -1210,19 +1191,17 @@ const App: React.FC = () => {
   durationLabels.push({ value: sliderMinVal, text: `${sliderMinVal}s`});
 
   const p2Value = (selectedTickSoundUrl === CUSTOM_SOUND_URL_PLACEHOLDER && customSoundDurationSeconds !== null) 
-      ? Math.round(sliderMinVal + (sliderMaxVal - sliderMinVal) / 3) // Approx 1/3 of range
+      ? Math.round(sliderMinVal + (sliderMaxVal - sliderMinVal) / 3) 
       : 20;
   if (p2Value > sliderMinVal && p2Value < sliderMaxVal) {
       durationLabels.push({ value: p2Value, text: `${p2Value}s`});
   }
   
   const p3Value = (selectedTickSoundUrl === CUSTOM_SOUND_URL_PLACEHOLDER && customSoundDurationSeconds !== null)
-      ? Math.round(sliderMinVal + (sliderMaxVal - sliderMinVal) * 2 / 3) // Approx 2/3 of range
+      ? Math.round(sliderMinVal + (sliderMaxVal - sliderMinVal) * 2 / 3) 
       : 40;
   if (p3Value > sliderMinVal && p3Value < sliderMaxVal && (!durationLabels.some(l => l.value === p3Value) || p3Value > p2Value) ) {
-      // Ensure it's distinct and greater than p2 if p2 exists
       if (durationLabels.some(l => l.value === p2Value) && p3Value <= p2Value) {
-          // If p2 exists and p3 is not greater, skip or adjust p3. For now, skipping.
       } else {
         durationLabels.push({ value: p3Value, text: `${p3Value}s`});
       }
@@ -1231,7 +1210,6 @@ const App: React.FC = () => {
   if (sliderMaxVal > sliderMinVal && !durationLabels.some(l=>l.value === sliderMaxVal)) {
       durationLabels.push({ value: sliderMaxVal, text: `${sliderMaxVal}s`});
   }
-  // Remove duplicates by value and sort
   const uniqueDurationLabels = durationLabels
     .sort((a, b) => a.value - b.value)
     .filter((point, index, self) => index === self.findIndex(p => p.value === point.value));
@@ -1313,7 +1291,7 @@ const App: React.FC = () => {
           <WheelCanvas
             names={names}
             imageStore={imageStore}
-            boostedParticipants={showBoostWinRateSectionInTab ? boostedParticipants : []} // Pass boosted only if section is active
+            boostedParticipants={showBoostWinRateSectionInTab ? boostedParticipants : []} 
             rotationAngle={currentRotation}
             canvasSize={wheelAreaDimension * 0.9} 
             centerImageSrc={centerImageSrc}
@@ -1477,14 +1455,14 @@ const App: React.FC = () => {
                           ref={spinDurationSliderRef}
                           type="range"
                           id="spinDurationSlider"
-                          min="5" // Min spin duration
-                          max={sliderMaxVal} // Use calculated sliderMaxVal for consistency
+                          min="5" 
+                          max={sliderMaxVal} 
                           value={spinDuration / 1000}
                           onChange={(e) => {
                             if (isSpinning) return;
                             const newSpinDurationSeconds = parseInt(e.target.value, 10);
 
-                            if (isSpinDurationLocked) { // Locked by predefined sound
+                            if (isSpinDurationLocked) { 
                                 const lockedDuration = AVAILABLE_TICK_SOUNDS.find(s => s.url === selectedTickSoundUrl)?.fixedDuration;
                                 if (lockedDuration) {
                                     addNotification(`Thời gian quay được cố định bởi âm thanh "${AVAILABLE_TICK_SOUNDS.find(s => s.url === selectedTickSoundUrl)?.name}" (${lockedDuration}s).`, 'info');
@@ -1495,7 +1473,7 @@ const App: React.FC = () => {
                             if (selectedTickSoundUrl === CUSTOM_SOUND_URL_PLACEHOLDER && customSoundDurationSeconds !== null) {
                                 if (newSpinDurationSeconds > customSoundDurationSeconds) {
                                     addNotification(`Thời gian quay tối đa cho âm thanh này là ${customSoundDurationSeconds.toFixed(1)} giây.`, 'error');
-                                    setSpinDuration(Math.round(customSoundDurationSeconds * 1000)); // Clamp
+                                    setSpinDuration(Math.round(customSoundDurationSeconds * 1000)); 
                                     return;
                                 }
                             }
@@ -1503,7 +1481,7 @@ const App: React.FC = () => {
                           }}
                           onMouseEnter={() => setShowSpinDurationTooltip(true)}
                           onMouseLeave={() => setShowSpinDurationTooltip(false)}
-                          disabled={isSpinning || isSpinDurationLocked} // Only disabled if spinning or hard-locked by predefined sound
+                          disabled={isSpinning || isSpinDurationLocked} 
                           className="w-full h-auto bg-transparent appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none"
                           aria-label="Điều chỉnh thời gian quay vòng"
                         />
@@ -1519,10 +1497,9 @@ const App: React.FC = () => {
                         {uniqueDurationLabels.map(label => {
                             const leftPos = calculateLeftPercent(label.value, sliderMinVal, sliderMaxVal);
                             let transform = 'translateX(-50%)';
-                            if (label.value === sliderMinVal && parseFloat(leftPos) < 5) transform = 'translateX(0%)'; // Align left edge if at start
-                            if (label.value === sliderMaxVal && parseFloat(leftPos) > 95) transform = 'translateX(-100%)'; // Align right edge if at end
+                            if (label.value === sliderMinVal && parseFloat(leftPos) < 5) transform = 'translateX(0%)'; 
+                            if (label.value === sliderMaxVal && parseFloat(leftPos) > 95) transform = 'translateX(-100%)'; 
                             
-                            // Special handling for min and max to prevent transform if they are exactly 0% or 100%
                             if (label.value === sliderMinVal && leftPos === "0%") transform = 'none';
                             if (label.value === sliderMaxVal && leftPos === "100%") transform = 'translateX(-100%)';
 
