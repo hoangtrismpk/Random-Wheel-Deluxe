@@ -71,6 +71,34 @@ const DESIRED_INITIAL_ANGULAR_VELOCITY_RAD_PER_MS = 0.025;
 const ABSOLUTE_MIN_TOTAL_SPINS = 4;
 const EPSILON_FINISH = 0.001; // Small tolerance for comparing rotation angles (in radians)
 
+const LOCAL_STORAGE_KEY = 'spinTheWheelDeluxeAppState_v1.1'; // Versioning for easier future migrations
+
+interface SavedAppState {
+  names: string[];
+  imageStore: ImageStore;
+  spinDuration: number;
+  centerImageSrc: string | null;
+  wheelBackgroundImageSrc: string | null;
+  wheelDynamicBackground: WheelDynamicBackground;
+  wheelTextColor: string;
+  appGlobalBackground: AppGlobalBackground;
+  priorityNamesInput: string;
+  autoShuffle: boolean;
+  autoRemoveWinner: boolean;
+  useGiftList: boolean;
+  giftList: GiftItem[];
+  boostedParticipants: BoostedParticipant[];
+  titleText: string;
+  titleColorConfig: AppGlobalBackground;
+  selectedTickSoundUrl: string;
+  customSoundDataUrl: string | null;
+  customSoundName: string | null;
+  tickSoundVolume: number;
+  showPriorityInputSection: boolean;
+  showBoostWinRateSectionInTab: boolean;
+  winnerHistory: WinnerHistoryItem[];
+}
+
 
 const App: React.FC = () => {
   const [names, setNames] = useState<string[]>(['Nguyễn Văn An', 'Trần Thị Bích', 'Lê Minh Cường', 'Phạm Thu Hà', 'Hoàng Đức Hải', 'Vũ Ngọc Lan', 'Đặng Tiến Dũng', 'Bùi Thanh Mai']);
@@ -146,6 +174,100 @@ const App: React.FC = () => {
   const winSoundRef = useRef<HTMLAudioElement | null>(null);
   const winningGiftRef = useRef<GiftItem | null>(null);
   const spinDurationSliderRef = useRef<HTMLInputElement>(null); 
+
+
+  // LOAD SETTINGS
+  useEffect(() => {
+    const savedStateString = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (savedStateString) {
+      try {
+        const savedState = JSON.parse(savedStateString) as SavedAppState;
+        
+        if (savedState.names && savedState.imageStore) {
+          setNames(savedState.names);
+          setImageStore(savedState.imageStore);
+        }
+        
+        setSpinDuration(savedState.spinDuration ?? DEFAULT_SPIN_DURATION_MS);
+        setCenterImageSrc(savedState.centerImageSrc ?? null);
+        setWheelBackgroundImageSrc(savedState.wheelBackgroundImageSrc ?? null);
+        setWheelDynamicBackground(savedState.wheelDynamicBackground ?? null);
+        setWheelTextColor(savedState.wheelTextColor ?? DEFAULT_WHEEL_TEXT_COLOR);
+        setAppGlobalBackground(savedState.appGlobalBackground ?? null);
+        setPriorityNamesInput(savedState.priorityNamesInput ?? '');
+        setAutoShuffle(savedState.autoShuffle ?? false);
+        setAutoRemoveWinner(savedState.autoRemoveWinner ?? false);
+        setUseGiftList(savedState.useGiftList ?? false);
+        setGiftList(savedState.giftList ?? []);
+        setBoostedParticipants(savedState.boostedParticipants ?? []);
+        setTitleText(savedState.titleText ?? DEFAULT_TITLE_TEXT);
+        setTitleColorConfig(savedState.titleColorConfig ?? null);
+        
+        setCustomSoundDataUrl(savedState.customSoundDataUrl ?? null);
+        setCustomSoundName(savedState.customSoundName ?? null);
+        setSelectedTickSoundUrl(savedState.selectedTickSoundUrl ?? DEFAULT_TICK_SOUND_URL);
+        
+        setTickSoundVolume(savedState.tickSoundVolume ?? 1);
+        
+        setShowPriorityInputSection(savedState.showPriorityInputSection ?? false);
+        setShowBoostWinRateSectionInTab(savedState.showBoostWinRateSectionInTab ?? false);
+        setWinnerHistory(savedState.winnerHistory ?? []);
+        
+        addNotification('Đã tải cài đặt và danh sách đã lưu!', 'info', 2000);
+      } catch (error) {
+        console.error("Lỗi khi tải trạng thái từ localStorage:", error);
+        localStorage.removeItem(LOCAL_STORAGE_KEY); 
+        addNotification('Lỗi tải cài đặt đã lưu. Đã đặt lại về mặc định.', 'error', 3000);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount
+
+  // SAVE SETTINGS
+  useEffect(() => {
+    // Do not save if it's the initial render and states are still default,
+    // unless explicitly triggered by a load (which means the initial values are intended)
+    // This check is tricky without a "loaded" flag. The current setup will save defaults if no saved data exists.
+    // This is generally fine.
+    
+    const appStateToSave: SavedAppState = {
+      names,
+      imageStore,
+      spinDuration,
+      centerImageSrc,
+      wheelBackgroundImageSrc,
+      wheelDynamicBackground,
+      wheelTextColor,
+      appGlobalBackground,
+      priorityNamesInput,
+      autoShuffle,
+      autoRemoveWinner,
+      useGiftList,
+      giftList,
+      boostedParticipants,
+      titleText,
+      titleColorConfig,
+      selectedTickSoundUrl,
+      customSoundDataUrl,
+      customSoundName,
+      tickSoundVolume,
+      showPriorityInputSection,
+      showBoostWinRateSectionInTab,
+      winnerHistory,
+    };
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(appStateToSave));
+    } catch (error) {
+      console.error("Lỗi khi lưu trạng thái vào localStorage:", error);
+      addNotification('Lỗi: Không thể tự động lưu cài đặt.', 'error', 5000);
+    }
+  }, [
+    names, imageStore, spinDuration, centerImageSrc, wheelBackgroundImageSrc,
+    wheelDynamicBackground, wheelTextColor, appGlobalBackground, priorityNamesInput,
+    autoShuffle, autoRemoveWinner, useGiftList, giftList, boostedParticipants,
+    titleText, titleColorConfig, selectedTickSoundUrl, customSoundDataUrl, customSoundName,
+    tickSoundVolume, showPriorityInputSection, showBoostWinRateSectionInTab, winnerHistory, addNotification
+  ]);
 
 
   useEffect(() => {

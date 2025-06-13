@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { ImageStore, ImageAsset } from '../App'; // Import ImageStore type
 import { useNotification } from './NotificationContext'; // Import useNotification
@@ -499,7 +500,7 @@ const NameInput: React.FC<NameInputProps> = ({
       sortableItems.sort((a, b) => b.display.localeCompare(a.display, 'vi', { sensitivity: 'base' }));
       nextSortDirection = 'desc';
     } else { 
-      sortableItems.sort((a, b) => a.display.localeCompare(b.display, 'vi', { sensitivity: 'base' }));
+      sortableItems.sort((a, b) => a.display.localeCompare(a.display, 'vi', { sensitivity: 'base' }));
       nextSortDirection = 'asc';
     }
 
@@ -564,3 +565,4 @@ const NameInput: React.FC<NameInputProps> = ({
 };
 
 export default NameInput;
+    

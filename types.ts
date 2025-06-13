@@ -84,11 +84,3 @@ export type AppGlobalBackground =
   | LinearGradientBackgroundConfig // Re-using the same structure for linear
   | RadialGradientBackgroundConfig // Re-using the same structure for radial
   | null; // Null means use default Tailwind classes
-
-// Moved from App.tsx
-export interface SoundOption {
-  name: string;
-  url: string;
-  fixedDuration?: number; // in seconds, locks spin duration
-  isContinuous?: boolean; // If true, plays continuously during spin
-}
