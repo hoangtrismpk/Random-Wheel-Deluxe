@@ -470,9 +470,19 @@ const App: React.FC = () => {
   }, [isSpinning, showWinnerModal]);
 
 
-  const addNewImageToWheel = useCallback((id: string, dataURL: string, fileName: string) => {
-    setImageStore(prev => ({ ...prev, [id]: { dataURL, fileName } }));
-    setNames(prevNames => [...prevNames, id]);
+  const addMultipleImagesToWheel = useCallback((newAssets: { id: string; dataURL: string; fileName: string }[]) => {
+    if (newAssets.length === 0) return;
+
+    setImageStore(prevStore => {
+        const newStoreEntries = newAssets.reduce((acc, asset) => {
+            acc[asset.id] = { dataURL: asset.dataURL, fileName: asset.fileName };
+            return acc;
+        }, {} as ImageStore);
+        return { ...prevStore, ...newStoreEntries };
+    });
+
+    const newIds = newAssets.map(asset => asset.id);
+    setNames(prevNames => [...prevNames, ...newIds]);
   }, []);
 
   const getCurrentGiftToSpinFor = (): GiftItem | null => {
@@ -1138,7 +1148,7 @@ const App: React.FC = () => {
             currentNames={names}
             imageStore={imageStore}
             onNamesChange={handleNamesUpdate}
-            addNewImageToWheel={addNewImageToWheel}
+            addMultipleImagesToWheel={addMultipleImagesToWheel}
             isSpinning={isSpinning || showWinnerModal}
           />
         </>

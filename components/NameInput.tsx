@@ -6,7 +6,7 @@ interface NameInputProps {
   currentNames: string[];
   imageStore: ImageStore;
   onNamesChange: (names: string[]) => void;
-  addNewImageToWheel: (id: string, dataURL: string, fileName: string) => void;
+  addMultipleImagesToWheel: (assets: { id: string, dataURL: string, fileName: string }[]) => void;
   isSpinning: boolean;
 }
 
@@ -135,12 +135,57 @@ const deriveNamesFromDOM = (container: HTMLDivElement | null, currentImageStore:
   });
 };
 
+// Natural Sort Comparator with Vietnamese Name Sorting
+const naturalSortCompare = (a: string, b: string): number => {
+    // 1. Numeric parsing logic
+    const parseValue = (s: string): number => {
+        const normalized = s.toLowerCase().trim();
+        const num = parseFloat(normalized);
+        if (isNaN(num)) return NaN;
+        
+        if (normalized.endsWith('k')) return num * 1000;
+        if (normalized.endsWith('m')) return num * 1000000;
+        
+        return num;
+    };
+
+    const valA = parseValue(a);
+    const valB = parseValue(b);
+    const aIsNum = !isNaN(valA);
+    const bIsNum = !isNaN(valB);
+
+    if (aIsNum && bIsNum) {
+        return valA - valB;
+    }
+    
+    if (aIsNum) return -1; // Rule: numbers before strings in A-Z
+    if (bIsNum) return 1;
+
+    // 2. Vietnamese name sorting logic
+    const getLastWord = (s: string): string => {
+        const words = s.trim().split(/\s+/);
+        return words.length > 0 ? words[words.length - 1] : s;
+    };
+
+    const lastWordA = getLastWord(a);
+    const lastWordB = getLastWord(b);
+
+    const comparison = lastWordA.localeCompare(lastWordB, 'vi', { sensitivity: 'base' });
+
+    // 3. Fallback to full string comparison if last words are the same
+    if (comparison !== 0) {
+        return comparison;
+    } else {
+        return a.localeCompare(b, 'vi', { sensitivity: 'base' });
+    }
+};
+
 
 const NameInput: React.FC<NameInputProps> = ({
   currentNames,
   imageStore,
   onNamesChange,
-  addNewImageToWheel,
+  addMultipleImagesToWheel,
   isSpinning
 }) => {
   const [sortDirection, setSortDirection] = useState<SortDirection>('none');
@@ -505,33 +550,65 @@ const NameInput: React.FC<NameInputProps> = ({
   };
 
   const handleFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
+    const files = event.target.files;
+    if (!files || files.length === 0) {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    const newAssets: { id: string, dataURL: string, fileName: string }[] = [];
+    const filePromises: Promise<void>[] = [];
+    
+    Array.from(files).forEach((file, index) => {
+      // Validation
       if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type)) {
-        addNotification('Loại tệp không hợp lệ. Vui lòng chọn ảnh PNG, JPG, WEBP, hoặc GIF.', 'error');
-        if(fileInputRef.current) fileInputRef.current.value = ""; 
-        return;
+        addNotification(`Bỏ qua tệp không hợp lệ: ${file.name}`, 'error');
+        return; // continue to next file
       }
       if (file.size > 2 * 1024 * 1024) { // 2MB limit
-        addNotification('Tệp quá lớn. Kích thước tối đa cho ảnh trên vòng quay là 2MB.', 'error');
-        if(fileInputRef.current) fileInputRef.current.value = ""; 
-        return;
+        addNotification(`Bỏ qua tệp quá lớn: ${file.name} (tối đa 2MB).`, 'error');
+        return; // continue to next file
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const dataURL = reader.result as string;
-        const id = `img_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-        isProgrammaticUpdateRef.current = true; 
-        addNewImageToWheel(id, dataURL, file.name); 
-        addNotification(`Đã thêm ảnh: ${file.name}`, 'success');
-        if(fileInputRef.current) fileInputRef.current.value = ""; 
-      };
-      reader.onerror = () => {
-        addNotification('Lỗi đọc tệp.', 'error');
-        if(fileInputRef.current) fileInputRef.current.value = ""; 
-      }
-      reader.readAsDataURL(file);
-    }
+
+      // Create a promise for each file reader
+      const promise = new Promise<void>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          try {
+            const dataURL = reader.result as string;
+            const id = `img_${Date.now()}_${index}_${Math.random().toString(36).substring(2, 9)}`;
+            newAssets.push({ id, dataURL, fileName: file.name });
+            resolve();
+          } catch (e) {
+            reject(new Error(`Error processing data URL for ${file.name}`));
+          }
+        };
+        reader.onerror = (error) => {
+          reject(error);
+        };
+        reader.readAsDataURL(file);
+      });
+      filePromises.push(promise);
+    });
+
+    Promise.all(filePromises)
+      .then(() => {
+        if (newAssets.length > 0) {
+          isProgrammaticUpdateRef.current = true;
+          addMultipleImagesToWheel(newAssets); 
+          addNotification(`Đã thêm ${newAssets.length} ảnh vào vòng quay.`, 'success');
+        }
+      })
+      .catch((error) => {
+        console.error("Lỗi khi xử lý tệp ảnh:", error);
+        addNotification('Đã xảy ra lỗi khi thêm một hoặc nhiều ảnh.', 'error');
+      })
+      .finally(() => {
+        // Reset the input value so the same file can be selected again
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      });
   };
 
 
@@ -559,10 +636,12 @@ const NameInput: React.FC<NameInputProps> = ({
     let nextSortDirection: SortDirection;
 
     if (sortDirection === 'asc') {
-      sortableItems.sort((a, b) => b.display.localeCompare(a.display, 'vi', { sensitivity: 'base' }));
+      // Sort Z-A (descending)
+      sortableItems.sort((a, b) => naturalSortCompare(b.display, a.display));
       nextSortDirection = 'desc';
     } else { 
-      sortableItems.sort((a, b) => a.display.localeCompare(a.display, 'vi', { sensitivity: 'base' }));
+      // Sort A-Z (ascending)
+      sortableItems.sort((a, b) => naturalSortCompare(a.display, b.display));
       nextSortDirection = 'asc';
     }
 
@@ -603,6 +682,7 @@ const NameInput: React.FC<NameInputProps> = ({
         accept="image/png,image/jpeg,image/webp,image/gif"
         className="hidden"
         aria-hidden="true"
+        multiple
       />
       <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
         <button
