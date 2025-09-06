@@ -151,6 +151,97 @@ const App: React.FC = () => {
   const spinDurationSliderRef = useRef<HTMLInputElement>(null); 
 
 
+  // Load state from localStorage on initial render
+  useEffect(() => {
+    try {
+      const savedStateJSON = localStorage.getItem('wheelOfFortuneState');
+      if (savedStateJSON) {
+        const savedState = JSON.parse(savedStateJSON);
+        
+        if (savedState.names !== undefined) setNames(savedState.names);
+        if (savedState.imageStore !== undefined) setImageStore(savedState.imageStore);
+        if (savedState.winnerHistory !== undefined) setWinnerHistory(savedState.winnerHistory);
+        if (savedState.centerImageSrc !== undefined) setCenterImageSrc(savedState.centerImageSrc);
+        if (savedState.wheelBackgroundImageSrc !== undefined) setWheelBackgroundImageSrc(savedState.wheelBackgroundImageSrc);
+        if (savedState.wheelDynamicBackground !== undefined) setWheelDynamicBackground(savedState.wheelDynamicBackground);
+        if (savedState.wheelTextColor !== undefined) setWheelTextColor(savedState.wheelTextColor);
+        if (savedState.appGlobalBackground !== undefined) setAppGlobalBackground(savedState.appGlobalBackground);
+        if (savedState.priorityNamesInput !== undefined) setPriorityNamesInput(savedState.priorityNamesInput);
+        if (typeof savedState.autoShuffle === 'boolean') setAutoShuffle(savedState.autoShuffle);
+        if (typeof savedState.autoRemoveWinner === 'boolean') setAutoRemoveWinner(savedState.autoRemoveWinner);
+        if (savedState.activeTab !== undefined) setActiveTab(savedState.activeTab);
+        if (typeof savedState.isSpinOptionsOpen === 'boolean') setIsSpinOptionsOpen(savedState.isSpinOptionsOpen);
+        if (savedState.activeSpinOptionTab !== undefined) setActiveSpinOptionTab(savedState.activeSpinOptionTab);
+        if (typeof savedState.isWheelCustomizationOpen === 'boolean') setIsWheelCustomizationOpen(savedState.isWheelCustomizationOpen);
+        if (typeof savedState.isAppAppearanceOpen === 'boolean') setIsAppAppearanceOpen(savedState.isAppAppearanceOpen);
+        if (typeof savedState.showBoostWinRateSectionInTab === 'boolean') setShowBoostWinRateSectionInTab(savedState.showBoostWinRateSectionInTab);
+        if (typeof savedState.useGiftList === 'boolean') setUseGiftList(savedState.useGiftList);
+        if (savedState.giftList !== undefined) setGiftList(savedState.giftList);
+        if (savedState.boostedParticipants !== undefined) setBoostedParticipants(savedState.boostedParticipants);
+        if (savedState.titleText !== undefined) setTitleText(savedState.titleText);
+        if (savedState.titleColorConfig !== undefined) setTitleColorConfig(savedState.titleColorConfig);
+        if (savedState.selectedTickSoundUrl !== undefined) setSelectedTickSoundUrl(savedState.selectedTickSoundUrl);
+        if (savedState.customSoundDataUrl !== undefined) setCustomSoundDataUrl(savedState.customSoundDataUrl);
+        if (savedState.customSoundName !== undefined) setCustomSoundName(savedState.customSoundName);
+        if (savedState.customSoundDurationSeconds !== undefined) setCustomSoundDurationSeconds(savedState.customSoundDurationSeconds);
+        if (typeof savedState.tickSoundVolume === 'number') setTickSoundVolume(savedState.tickSoundVolume);
+        if (typeof savedState.spinDuration === 'number') setSpinDuration(savedState.spinDuration);
+        if (typeof savedState.isSpinDurationLocked === 'boolean') setIsSpinDurationLocked(savedState.isSpinDurationLocked);
+      }
+    } catch (error) {
+      console.error("Could not load state from localStorage:", error);
+      localStorage.removeItem('wheelOfFortuneState'); // Clear corrupted state
+    }
+  }, []); // Empty array ensures this runs only once on mount
+
+  // Save state to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      const stateToSave = {
+        names,
+        imageStore,
+        winnerHistory,
+        centerImageSrc,
+        wheelBackgroundImageSrc,
+        wheelDynamicBackground,
+        wheelTextColor,
+        appGlobalBackground,
+        priorityNamesInput,
+        autoShuffle,
+        autoRemoveWinner,
+        activeTab,
+        isSpinOptionsOpen,
+        activeSpinOptionTab,
+        isWheelCustomizationOpen,
+        isAppAppearanceOpen,
+        showBoostWinRateSectionInTab,
+        useGiftList,
+        giftList,
+        boostedParticipants,
+        titleText,
+        titleColorConfig,
+        selectedTickSoundUrl,
+        customSoundDataUrl,
+        customSoundName,
+        customSoundDurationSeconds,
+        tickSoundVolume,
+        spinDuration,
+        isSpinDurationLocked,
+      };
+      localStorage.setItem('wheelOfFortuneState', JSON.stringify(stateToSave));
+    } catch (error) {
+      console.error("Could not save state to localStorage:", error);
+    }
+  }, [
+    names, imageStore, winnerHistory, centerImageSrc, wheelBackgroundImageSrc, 
+    wheelDynamicBackground, wheelTextColor, appGlobalBackground, priorityNamesInput, 
+    autoShuffle, autoRemoveWinner, activeTab, isSpinOptionsOpen, activeSpinOptionTab, 
+    isWheelCustomizationOpen, isAppAppearanceOpen, showBoostWinRateSectionInTab, 
+    useGiftList, giftList, boostedParticipants, titleText, titleColorConfig, 
+    selectedTickSoundUrl, customSoundDataUrl, customSoundName, customSoundDurationSeconds, 
+    tickSoundVolume, spinDuration, isSpinDurationLocked
+  ]);
+
   useEffect(() => {
     winSoundRef.current = new Audio("https://irace.vn/wp-content/uploads/2025/05/vo-tay.mp3");
     winSoundRef.current.preload = "auto";
