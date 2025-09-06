@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { ImageStore, ImageAsset } from '../App'; // Import ImageStore type
 import { useNotification } from './NotificationContext'; // Import useNotification
@@ -12,6 +11,69 @@ interface NameInputProps {
 }
 
 type SortDirection = 'none' | 'asc' | 'desc';
+
+const PRESET_LISTS = [
+  {
+    label: 'Lì xì',
+    items: ['10K', '20K', '50K', '100K', '200K', '500K', 'Chúc may mắn năm sau'],
+  },
+  {
+    label: 'Tối nay ăn gì',
+    items: [
+      'Chè Khúc Bạch', 'Bánh Mì Kẹp', 'Gỏi Sứa', 'Cháo Lòng', 'Chè Bưởi',
+      'Bánh Canh Cua', 'Nộm Bò Khô', 'Bánh Xèo', 'Chè Trôi Nước', 'Miến Ngan',
+      'Chả Cá Lã Vọng', 'Cá Kho Tộ', 'Gỏi Cá Mai', 'Nem Nướng Nha Trang',
+      'Bánh Tôm Hồ Tây', 'Bánh Bột Lọc', 'Xôi Xéo', 'Rau Câu Dừa', 'Hủ Tiếu Gõ',
+      'Gỏi Gà Xé Phay', 'Cháo Sườn', 'Nước Mía', 'Lẩu Thả Phan Thiết', 'Phá Lấu',
+      'Cơm Tấm Sườn Bì Chả', 'Phở Bò', 'Cơm Hến', 'Sinh Tố Bơ', 'Nem Lụi',
+      'Bánh Nậm', 'Chè Ba Màu', 'Bún Bò Huế', 'Lẩu Mắm', 'Trứng Cút Lộn Xào Me',
+      'Gỏi Cuốn', 'Bún Chả Hà Nội', 'Cơm Gà Hội An', 'Cháo Gà', 'Đậu Phụ Sốt Cà Chua',
+      'Bún Cá', 'Chè Hạt Sen Long Nhãn', 'Thịt Luộc Mắm Tôm', 'Bánh Đa Cua Hải Phòng',
+      'Nem Chua Thanh Hóa', 'Bánh Cống', 'Gà Nướng Mắc Khén', 'Phô Mai Que',
+      'Chè Thái Sầu Riêng', 'Bún Thang', 'Bánh Dày', 'Phở Gà', 'Gà Đồi Nướng',
+      'Cà Phê Sữa Đá', 'Bún Mọc', 'Bò Bía', 'Lẩu Cua Đồng', 'Miến Lươn',
+      'Bún Đậu Mắm Tôm', 'Bò Tơ Củ Chi', 'Canh Chua Cá Lóc', 'Gà Hấp Lá Chanh',
+      'Lòng Xào Dưa', 'Xôi Lạc', 'Bò Kho', 'Cà Phê Trứng', 'Bánh Chưng/Bánh Tét',
+      'Dê Núi Ninh Bình', 'Chả Ram Tôm Đất', 'Cà Pháo Mắm Tôm', 'Sữa Chua Mít',
+      'Bánh Giò', 'Bánh Nậm', 'Bánh Flan (Caramel)', 'Gỏi Ngó Sen Tôm Thịt',
+      'Vịt Quay Lạng Sơn', 'Mì Quảng', 'Chè Bưởi', 'Heo Tộc Nướng', 'Bánh Bèo',
+      'Nộm Hoa Chuối', 'Hủ Tiếu Nam Vang', 'Bánh Khọt', 'Bắp Xào', 'Bánh Căn',
+      'Nem Chua Rán', 'Bánh Đúc', 'Rau Muống Xào Tỏi', 'Bánh Tráng Nướng Đà Lạt',
+      'Sữa Chua Nếp Cẩm', 'Gỏi Xoài Xanh Tôm Khô', 'Bún Riêu Cua', 'Ốc Luộc/Ốc Hút',
+      'Nem Chua Rán', 'Bột Chiên', 'Bê Thui Cầu Mống', 'Chè Ba Màu', 'Bánh Ít Trần',
+      'Nem Lụi', 'Chân Gà Sả Tắc', 'Chả Giò (Nem Rán)'
+    ],
+  },
+  {
+    label: 'Đặt tên con gái',
+    items: [
+      'An Nhiên', 'Bảo Anh', 'Bảo Ngọc', 'Bích Ngọc', 'Cát Tường', 'Diệp Anh',
+      'Diệu Linh', 'Gia Hân', 'Gia Nhi', 'Hà My', 'Hải Yến', 'Hạ Vy', 'Hồng Ân',
+      'Hồng Nhung', 'Hương Giang', 'Huyền My', 'Khánh An', 'Khánh Linh', 'Kim Anh',
+      'Kim Ngân', 'Lam Anh', 'Lan Chi', 'Lan Hương', 'Mai Chi', 'Minh Anh',
+      'Minh Châu', 'Minh Khuê', 'Mỹ Duyên', 'Mỹ Linh', 'Ngọc Anh', 'Ngọc Bích',
+      'Ngọc Lan', 'Nguyệt Minh', 'Nhã Phương', 'Nhật Hạ', 'Nhật Linh', 'Phương Anh',
+      'Phương Linh', 'Quỳnh Anh', 'Quỳnh Hoa', 'Quỳnh Như', 'Thanh Hà',
+      'Thanh Tâm', 'Thanh Thảo', 'Thiên An', 'Thiên Kim', 'Thu Hằng', 'Thùy Dương',
+      'Trúc Lam', 'Tường Vy'
+    ]
+  },
+  {
+    label: 'Đặt tên con trai',
+    items: [
+      'Anh Dũng', 'Anh Khoa', 'Anh Minh', 'Anh Quân', 'Anh Tuấn', 'Bảo Long',
+      'Bảo Minh', 'Bảo Nam', 'Bảo Phúc', 'Bảo Sơn', 'Chí Công', 'Chí Kiên',
+      'Chí Thành', 'Công Danh', 'Đình An', 'Đình Huy', 'Đình Khoa', 'Đình Phúc',
+      'Đình Quân', 'Đức Anh', 'Đức Bình', 'Đức Hòa', 'Đức Long', 'Đức Minh',
+      'Gia Bảo', 'Gia Hưng', 'Gia Khánh', 'Gia Minh', 'Gia Phúc', 'Hải Đăng',
+      'Hải Nam', 'Hạo Nhiên', 'Hoàng Anh', 'Hoàng Minh', 'Hoàng Nam',
+      'Hoàng Phúc', 'Hoàng Quân', 'Khánh Duy', 'Khánh Hưng', 'Khánh Minh',
+      'Khánh Ngọc', 'Khánh Phú', 'Minh Hoàng', 'Minh Khang', 'Minh Nhật',
+      'Minh Quân', 'Nhật Minh', 'Nhật Nam', 'Thanh Phong', 'Thiên Phúc'
+    ]
+  }
+];
+
 
 // Fisher-Yates Shuffle Algorithm
 const shuffleArray = (array: string[]): string[] => {
@@ -511,6 +573,15 @@ const NameInput: React.FC<NameInputProps> = ({
     addNotification(`Đã sắp xếp ${nextSortDirection === 'asc' ? 'A-Z' : 'Z-A'}.`, 'info');
   };
 
+  const handlePresetClick = (presetItems: string[], presetLabel: string) => {
+    if (isSpinning) return;
+    isProgrammaticUpdateRef.current = true;
+    onNamesChange(presetItems);
+    addNotification(`Đã nhập danh sách chủ đề "${presetLabel}".`, 'info');
+    setSortDirection('none');
+  };
+
+
   return (
     <>
       <div
@@ -559,10 +630,27 @@ const NameInput: React.FC<NameInputProps> = ({
           Sắp xếp {sortDirection === 'asc' ? '(A-Z ↓)' : sortDirection === 'desc' ? '(Z-A ↑)' : ''}
         </button>
       </div>
+
+      <div className="mt-4 pt-4 border-t border-slate-700/50">
+        <p className="text-sm text-slate-400 mb-3 text-center">Hoặc nhập nhanh theo chủ đề:</p>
+        <div className="flex flex-wrap gap-2 justify-center">
+          {PRESET_LISTS.map((preset) => (
+            <button
+              key={preset.label}
+              onClick={() => handlePresetClick(preset.items, preset.label)}
+              disabled={isSpinning}
+              className="bg-slate-600 hover:bg-pink-600 text-slate-200 hover:text-white text-sm font-medium py-2 px-3 rounded-lg shadow-sm hover:shadow-md transition duration-150 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed"
+              title={`Nhập danh sách: ${preset.label}`}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <p className="text-xs text-slate-500 mt-3 text-center">Mỗi mục sẽ là một dòng. Vòng quay tự động cập nhật.</p>
     </>
   );
 };
 
 export default NameInput;
-    

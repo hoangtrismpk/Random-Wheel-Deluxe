@@ -1,5 +1,5 @@
 {
-  "name": "spin-the-wheel-deluxe-ver-1.0",
+  "name": "vòng-quay-may-mắn-miễn-phí-–-tạo-minigame-quay-trúng-thưởng-trong-1-phút",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -14,7 +14,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
-    "typescript": "~5.7.2",
+    "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }
 }

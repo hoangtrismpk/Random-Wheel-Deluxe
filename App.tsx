@@ -13,6 +13,7 @@ import WheelTextColorPicker from './components/WheelTextColorPicker'; // Import 
 import TitleTextEditor from './components/TitleTextEditor'; // Import new component for title text
 import TitleColorPicker from './components/TitleColorPicker'; // Import new component for title color
 import TickSoundSelector from './components/TickSoundSelector'; // Import new component for tick sound
+import InfoSection from './components/InfoSection'; // Import the new InfoSection component
 import type { GiftItem, WinnerHistoryItem, WinnerDetails, GiftAwardHistoryItem, NonGiftWinnerHistoryItem, BoostedParticipant, WheelDynamicBackground, AppGlobalBackground } from './types'; // Kiểu dữ liệu mới
 import { useNotification } from './components/NotificationContext'; // Import useNotification
 
@@ -70,34 +71,6 @@ type SpinOptionTab = 'beforeSpin' | 'duringSpin' | 'afterSpin';
 const DESIRED_INITIAL_ANGULAR_VELOCITY_RAD_PER_MS = 0.025; 
 const ABSOLUTE_MIN_TOTAL_SPINS = 4;
 const EPSILON_FINISH = 0.001; // Small tolerance for comparing rotation angles (in radians)
-
-const LOCAL_STORAGE_KEY = 'spinTheWheelDeluxeAppState_v1.1'; // Versioning for easier future migrations
-
-interface SavedAppState {
-  names: string[];
-  imageStore: ImageStore;
-  spinDuration: number;
-  centerImageSrc: string | null;
-  wheelBackgroundImageSrc: string | null;
-  wheelDynamicBackground: WheelDynamicBackground;
-  wheelTextColor: string;
-  appGlobalBackground: AppGlobalBackground;
-  priorityNamesInput: string;
-  autoShuffle: boolean;
-  autoRemoveWinner: boolean;
-  useGiftList: boolean;
-  giftList: GiftItem[];
-  boostedParticipants: BoostedParticipant[];
-  titleText: string;
-  titleColorConfig: AppGlobalBackground;
-  selectedTickSoundUrl: string;
-  customSoundDataUrl: string | null;
-  customSoundName: string | null;
-  tickSoundVolume: number;
-  showPriorityInputSection: boolean;
-  showBoostWinRateSectionInTab: boolean;
-  winnerHistory: WinnerHistoryItem[];
-}
 
 
 const App: React.FC = () => {
@@ -162,6 +135,8 @@ const App: React.FC = () => {
   const [sliderThumbPositionStyle, setSliderThumbPositionStyle] = useState({ left: '0%' });
   const [showSpinDurationTooltip, setShowSpinDurationTooltip] = useState(false);
 
+  const [isSettingsPanelVisible, setIsSettingsPanelVisible] = useState(true);
+
 
   const spinStartRotationRef = useRef(0);
   const targetRotationRef = useRef(0);
@@ -176,105 +151,17 @@ const App: React.FC = () => {
   const spinDurationSliderRef = useRef<HTMLInputElement>(null); 
 
 
-  // LOAD SETTINGS
-  useEffect(() => {
-    const savedStateString = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (savedStateString) {
-      try {
-        const savedState = JSON.parse(savedStateString) as SavedAppState;
-        
-        if (savedState.names && savedState.imageStore) {
-          setNames(savedState.names);
-          setImageStore(savedState.imageStore);
-        }
-        
-        setSpinDuration(savedState.spinDuration ?? DEFAULT_SPIN_DURATION_MS);
-        setCenterImageSrc(savedState.centerImageSrc ?? null);
-        setWheelBackgroundImageSrc(savedState.wheelBackgroundImageSrc ?? null);
-        setWheelDynamicBackground(savedState.wheelDynamicBackground ?? null);
-        setWheelTextColor(savedState.wheelTextColor ?? DEFAULT_WHEEL_TEXT_COLOR);
-        setAppGlobalBackground(savedState.appGlobalBackground ?? null);
-        setPriorityNamesInput(savedState.priorityNamesInput ?? '');
-        setAutoShuffle(savedState.autoShuffle ?? false);
-        setAutoRemoveWinner(savedState.autoRemoveWinner ?? false);
-        setUseGiftList(savedState.useGiftList ?? false);
-        setGiftList(savedState.giftList ?? []);
-        setBoostedParticipants(savedState.boostedParticipants ?? []);
-        setTitleText(savedState.titleText ?? DEFAULT_TITLE_TEXT);
-        setTitleColorConfig(savedState.titleColorConfig ?? null);
-        
-        setCustomSoundDataUrl(savedState.customSoundDataUrl ?? null);
-        setCustomSoundName(savedState.customSoundName ?? null);
-        setSelectedTickSoundUrl(savedState.selectedTickSoundUrl ?? DEFAULT_TICK_SOUND_URL);
-        
-        setTickSoundVolume(savedState.tickSoundVolume ?? 1);
-        
-        setShowPriorityInputSection(savedState.showPriorityInputSection ?? false);
-        setShowBoostWinRateSectionInTab(savedState.showBoostWinRateSectionInTab ?? false);
-        setWinnerHistory(savedState.winnerHistory ?? []);
-        
-        addNotification('Đã tải cài đặt và danh sách đã lưu!', 'info', 2000);
-      } catch (error) {
-        console.error("Lỗi khi tải trạng thái từ localStorage:", error);
-        localStorage.removeItem(LOCAL_STORAGE_KEY); 
-        addNotification('Lỗi tải cài đặt đã lưu. Đã đặt lại về mặc định.', 'error', 3000);
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount
-
-  // SAVE SETTINGS
-  useEffect(() => {
-    // Do not save if it's the initial render and states are still default,
-    // unless explicitly triggered by a load (which means the initial values are intended)
-    // This check is tricky without a "loaded" flag. The current setup will save defaults if no saved data exists.
-    // This is generally fine.
-    
-    const appStateToSave: SavedAppState = {
-      names,
-      imageStore,
-      spinDuration,
-      centerImageSrc,
-      wheelBackgroundImageSrc,
-      wheelDynamicBackground,
-      wheelTextColor,
-      appGlobalBackground,
-      priorityNamesInput,
-      autoShuffle,
-      autoRemoveWinner,
-      useGiftList,
-      giftList,
-      boostedParticipants,
-      titleText,
-      titleColorConfig,
-      selectedTickSoundUrl,
-      customSoundDataUrl,
-      customSoundName,
-      tickSoundVolume,
-      showPriorityInputSection,
-      showBoostWinRateSectionInTab,
-      winnerHistory,
-    };
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(appStateToSave));
-    } catch (error) {
-      console.error("Lỗi khi lưu trạng thái vào localStorage:", error);
-      addNotification('Lỗi: Không thể tự động lưu cài đặt.', 'error', 5000);
-    }
-  }, [
-    names, imageStore, spinDuration, centerImageSrc, wheelBackgroundImageSrc,
-    wheelDynamicBackground, wheelTextColor, appGlobalBackground, priorityNamesInput,
-    autoShuffle, autoRemoveWinner, useGiftList, giftList, boostedParticipants,
-    titleText, titleColorConfig, selectedTickSoundUrl, customSoundDataUrl, customSoundName,
-    tickSoundVolume, showPriorityInputSection, showBoostWinRateSectionInTab, winnerHistory, addNotification
-  ]);
-
-
   useEffect(() => {
     winSoundRef.current = new Audio("https://irace.vn/wp-content/uploads/2025/05/vo-tay.mp3");
     winSoundRef.current.preload = "auto";
     winSoundRef.current.onerror = () => {
         // console.error("Error loading win sound.");
+    };
+
+    return () => {
+      if (animationFrameIdRef.current) {
+        cancelAnimationFrame(animationFrameIdRef.current);
+      }
     };
   }, []);
 
@@ -831,9 +718,17 @@ const App: React.FC = () => {
         if (window.innerWidth < 1024) { 
             targetContainerWidth = window.innerWidth * 0.95;
             maxHeightConstraint = availableHeight * 0.70 - verticalPadding;
+            if (!isSettingsPanelVisible) {
+                maxHeightConstraint = availableHeight * 0.9 - verticalPadding;
+            }
         } else { 
-            targetContainerWidth = window.innerWidth * 0.55; 
-            maxHeightConstraint = availableHeight * 0.80 - verticalPadding; 
+            if (isSettingsPanelVisible) {
+                targetContainerWidth = window.innerWidth * 0.55; 
+                maxHeightConstraint = availableHeight * 0.80 - verticalPadding; 
+            } else {
+                targetContainerWidth = availableHeight * 0.9;
+                maxHeightConstraint = availableHeight * 0.9 - verticalPadding;
+            }
         }
 
         let newSize = Math.min(targetContainerWidth, maxHeightConstraint);
@@ -845,11 +740,8 @@ const App: React.FC = () => {
     window.addEventListener('resize', updateWheelAreaDimension);
     return () => {
         window.removeEventListener('resize', updateWheelAreaDimension);
-        if (animationFrameIdRef.current) {
-            cancelAnimationFrame(animationFrameIdRef.current);
-        }
     };
-  }, []);
+  }, [isSettingsPanelVisible]);
 
   const handleCloseWinnerModal = useCallback(() => {
     setShowWinnerModal(false);
@@ -1404,7 +1296,7 @@ const App: React.FC = () => {
         </h1>
       </header>
 
-      <main className="flex flex-col lg:flex-row items-start justify-around w-full max-w-screen-2xl gap-6 lg:gap-10">
+      <main className={`flex flex-col lg:flex-row items-start w-full max-w-screen-2xl gap-6 lg:gap-10 ${isSettingsPanelVisible ? 'lg:justify-around' : 'lg:justify-center'}`}>
         <div 
             ref={wheelWrapperRef} 
             className="relative flex-shrink-0 w-full lg:w-auto aspect-square mx-auto lg:mx-0" 
@@ -1426,7 +1318,7 @@ const App: React.FC = () => {
           />
         </div>
 
-        <div className="flex flex-col items-center space-y-5 w-full lg:max-w-md xl:max-w-lg">
+        <div className={`flex flex-col items-center space-y-5 w-full lg:max-w-md xl:max-w-lg ${isSettingsPanelVisible ? '' : 'hidden'}`}>
           <div className="w-full grid grid-cols-2 border-b border-slate-700 mb-0">
             <button
               onClick={() => setActiveTab('nameInput')}
@@ -1767,6 +1659,23 @@ const App: React.FC = () => {
 
         </div>
       </main>
+
+      <button
+          onClick={() => setIsSettingsPanelVisible(prev => !prev)}
+          disabled={isSpinning}
+          className="fixed top-1/2 -translate-y-1/2 right-0 z-30 bg-pink-600 text-white font-bold rounded-l-xl shadow-lg hover:bg-pink-700 transition-colors duration-300 ease-in-out border-2 border-pink-800 ring-1 ring-slate-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-pink-400 disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ 
+              writingMode: 'vertical-rl', 
+              textOrientation: 'mixed', 
+              textShadow: '1px 1px 2px rgba(0,0,0,0.6)',
+          }}
+          aria-label={isSettingsPanelVisible ? 'Ẩn thiết lập' : 'Hiện thiết lập'}
+      >
+          <span className="py-4 px-2 tracking-wider">{isSettingsPanelVisible ? 'Ẩn thiết lập' : 'Hiện thiết lập'}</span>
+      </button>
+
+      <InfoSection />
+
       <footer className="text-slate-500 text-sm mt-auto pt-6">
         Được xây dựng bởi iRace.vn ❤️
       </footer>

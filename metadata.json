@@ -1,6 +1,6 @@
 {
-  "name": "Spin the Wheel Deluxe Ver 1.0",
-  "description": "Ứng dụng vòng quay giải thưởng tương tác. Thêm tên hoặc vật phẩm, quay vòng quay và xem ai chiến thắng! Vui nhộn và dễ sử dụng cho các buổi rút thăm, quà tặng hoặc đưa ra lựa chọn ngẫu nhiên.",
+  "name": "Vòng quay may mắn miễn phí – Tạo minigame quay trúng thưởng trong 1 phút",
+  "description": "Tạo vòng quay may mắn miễn phí, tùy chỉnh logo – nền – âm thanh, quản lý quà & lịch sử. Phù hợp livestream, sự kiện, cửa hàng. Nhanh – minh bạch!",
   "requestFramePermissions": [],
   "prompt": ""
 }
