@@ -808,7 +808,7 @@ const App: React.FC = () => {
   }, [showWinnerModal, showConfetti]);
 
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const updateWheelAreaDimension = () => {
         let targetContainerWidth;
         let maxHeightConstraint;
@@ -816,19 +816,27 @@ const App: React.FC = () => {
         const verticalPadding = 40; 
         const minSize = 250;
 
-        if (window.innerWidth < 1024) { 
+        if (window.innerWidth < 1024) { // Mobile & Tablet
             targetContainerWidth = window.innerWidth * 0.95;
             maxHeightConstraint = availableHeight * 0.70 - verticalPadding;
             if (!isSettingsPanelVisible) {
                 maxHeightConstraint = availableHeight * 0.9 - verticalPadding;
             }
-        } else { 
+        } else { // Desktop and larger
+            const maxContentWidth = 1536; // from max-w-screen-2xl
+            const effectiveContentWidth = Math.min(window.innerWidth, maxContentWidth);
+            maxHeightConstraint = availableHeight * 0.80 - verticalPadding; 
+
             if (isSettingsPanelVisible) {
-                targetContainerWidth = window.innerWidth * 0.55; 
-                maxHeightConstraint = availableHeight * 0.80 - verticalPadding; 
+                // Determine panel width based on Tailwind breakpoints
+                // lg:max-w-md (448px), xl:max-w-lg (512px)
+                const panelWidth = window.innerWidth >= 1280 ? 512 : 448;
+                const gapWidth = 40; // from lg:gap-10
+                
+                targetContainerWidth = effectiveContentWidth - (panelWidth + gapWidth);
             } else {
-                targetContainerWidth = availableHeight * 0.9;
-                maxHeightConstraint = availableHeight * 0.9 - verticalPadding;
+                // When panel is hidden, wheel can use most of the space
+                targetContainerWidth = Math.min(effectiveContentWidth * 0.9, availableHeight * 0.9);
             }
         }
 
